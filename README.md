@@ -1,5 +1,9 @@
 # traction-engine
 
+![Steam traction engines with threshing machines, Latvia, 1930s](docs/images/steam-tractors-latvia.jpg)
+
+*Steam engine tractors with threshing machines, Latvia, 1930s. Photo: [Valters Grivins](https://www.flickr.com/photos/59344280@N08/6447495201/), [CC BY 2.0](https://creativecommons.org/licenses/by/2.0/).*
+
 A job-posting triage pipeline: give it a posting, get back what the employer is really looking for (must-haves, nice-to-haves, seniority, terms, comp) as structured data.
 
 I keep the data and fiddle with it for trend analysis.
