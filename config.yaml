@@ -1,0 +1,17 @@
+# Defaults for the public repo. Put private paths (postings_dir) in
+# config.local.yaml, which is gitignored and overrides these values.
+
+daily_cap_usd: 2.00
+base_url: https://openrouter.ai/api
+keychain_service: orak-traction-dev
+log_path: calls.jsonl
+reports_dir: reports
+
+models:
+  extract: anthropic/claude-haiku-5.5
+
+effort:
+  extract: low
+
+postings_dirs: [samples]
+postings_glob: ["*.md", "*.txt"]
