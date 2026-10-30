@@ -8,3 +8,4 @@ calls.jsonl
 config.local.yaml
 reports/
 .specstory/
+.vscode/
