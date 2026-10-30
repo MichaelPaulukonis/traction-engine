@@ -134,3 +134,33 @@ def test_summary_filters_by_cohort(project, capsys):
         (reports / f"{name}.json").write_text(json.dumps({"cohort": cohort, "requirements": req().model_dump()}))
     cli.main(["--summary", "--cohort", "live"])
     assert "Summary of 1 postings" in capsys.readouterr().out
+
+
+def test_seniority_is_a_sorted_deduped_list():
+    base = req().model_dump()
+    assert Requirements(**{**base, "seniority": ["staff", "senior", "staff"]}).seniority == ["senior", "staff"]
+    assert Requirements(**{**base, "seniority": ["unstated", "lead"]}).seniority == ["lead"]
+    assert Requirements(**{**base, "seniority": []}).seniority == ["unstated"]
+
+
+def test_seniority_accepts_legacy_string():
+    assert Requirements(**{**req().model_dump(), "seniority": "staff"}).seniority == ["staff"]
+
+
+def test_summary_counts_a_range_under_each_level():
+    ranged = {**req().model_dump(), "seniority": ["senior", "staff"]}
+    legacy = {**req().model_dump(), "seniority": "senior"}
+    text = cli.summarize([{"requirements": ranged}, {"requirements": legacy}])
+    assert "seniority: 2 senior, 1 staff" in text
+
+
+@pytest.mark.parametrize("name", ["LinkedIn", "LinkedIn Jobs", "linkedin.com"])
+def test_job_board_is_not_an_intermediary(name):
+    r = Requirements(**{**req().model_dump(), "source": "aggregator", "intermediary": name})
+    assert (r.source, r.intermediary) == ("direct", None)
+
+
+def test_real_aggregator_and_agency_are_kept():
+    base = req().model_dump()
+    assert Requirements(**{**base, "source": "aggregator", "intermediary": "Dice"}).intermediary == "Dice"
+    assert Requirements(**{**base, "source": "agency", "intermediary": "Beacon Hill"}).source == "agency"

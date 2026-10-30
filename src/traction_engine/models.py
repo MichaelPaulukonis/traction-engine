@@ -1,8 +1,13 @@
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 Seniority = Literal["junior", "mid", "senior", "lead", "staff", "principal", "unstated"]
+SENIORITY_ORDER = Seniority.__args__
+
+# Sites where employers post their own jobs: being found there makes a posting direct, not aggregated.
+# Repost sites (Dice, Built In relistings) are real aggregators and stay out. Add names as real postings show them.
+JOB_BOARDS = ("linkedin",)
 EmploymentType = Literal["full_time", "contract", "contract_to_hire", "part_time", "unstated"]
 ContractTerms = Literal["w2", "1099", "c2c", "unstated"]
 Source = Literal["direct", "agency", "aggregator", "unstated"]
@@ -26,7 +31,9 @@ class Requirement(BaseModel):
 class Requirements(BaseModel):
     title: str | None
     company: str | None = Field(description="The hiring company, not the staffing agency.")
-    seniority: Seniority
+    seniority: list[Seniority] = Field(
+        description="Every level the title names: 'Senior / Staff' is ['senior', 'staff']. ['unstated'] if none."
+    )
     employment_type: EmploymentType
     contract_terms: ContractTerms
     source: Source
@@ -40,6 +47,30 @@ class Requirements(BaseModel):
     comp_period: CompPeriod
     must_have: list[Requirement]
     nice_to_have: list[Requirement]
+
+    # The model flips between runs on whether the board is an intermediary; a lookup doesn't.
+    # Runs before validation so the intermediary/source consistency check sees the corrected pair.
+    @model_validator(mode="before")
+    @classmethod
+    def job_board_is_not_intermediary(cls, data):
+        name = (data.get("intermediary") or "").lower() if isinstance(data, dict) else ""
+        if any(board in name for board in JOB_BOARDS):
+            data = {**data, "intermediary": None, "source": "direct"}
+        return data
+
+    # Extractions saved before 2026-10-29 stored a single level as a string.
+    @field_validator("seniority", mode="before")
+    @classmethod
+    def seniority_as_list(cls, v):
+        return [v] if isinstance(v, str) else v
+
+    # Fixed order and no duplicates, so ['staff', 'senior'] and ['senior', 'staff'] are the same value.
+    @field_validator("seniority")
+    @classmethod
+    def seniority_normalized(cls, v):
+        levels = sorted(set(v), key=SENIORITY_ORDER.index)
+        named = [s for s in levels if s != "unstated"]
+        return named or ["unstated"]
 
     @model_validator(mode="after")
     def fields_consistent(self):

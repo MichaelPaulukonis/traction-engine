@@ -8,7 +8,7 @@ Fields:
 
 - title: the job title as written.
 - company: the hiring company. If a staffing agency, recruiter, or aggregator posted it, the company is the actual employer, when named; the intermediary goes in `intermediary`.
-- seniority: take it from the title only. "Senior"/"Sr." is senior, "Staff" is staff, "Principal" is principal, "Lead" is lead, "II"/"Intermediate" is mid, "Junior"/"Associate"/"I" is junior. If the title has no level, use "unstated". Do not infer a level from years of experience or the responsibilities.
+- seniority: a list, taken from the title only. "Senior"/"Sr." is senior, "Staff" is staff, "Principal" is principal, "Lead" is lead, "II"/"Intermediate" is mid, "Junior"/"Associate"/"I" is junior. A title naming a range or choice ("Senior / Staff", "Senior/Lead") gets every level it names: ["senior", "staff"]. If the title has no level, use ["unstated"]. Do not infer a level from years of experience or the responsibilities.
 - employment_type: full_time, contract, contract_to_hire (also "C2H", "temp to perm"), part_time, or unstated.
 - contract_terms: w2, 1099, c2c (corp-to-corp), or unstated. Only when stated.
 - source: "agency" if a staffing firm or recruiter is representing the role (they place the candidate, e.g. a W-2 contract through them); "aggregator" if a site or company relisted another employer's posting without representing it (signs: the description is clearly another company's, or a note says it was listed under one name but belongs to another); "direct" if the hiring company posted it; otherwise "unstated".

@@ -83,7 +83,7 @@ def render_report(path: Path, req: Requirements, warning: str | None) -> str:
         comp = f"{req.comp_min:,.0f}-{req.comp_max:,.0f} per {req.comp_period}"
     lines += [
         f"- Company: {req.company or 'unstated'}",
-        f"- Seniority: {req.seniority}",
+        f"- Seniority: {' / '.join(req.seniority)}",
         f"- Employment: {req.employment_type}, terms {req.contract_terms}",
         f"- Source: {req.source}" + (f" ({req.intermediary})" if req.intermediary else ""),
         f"- Workplace: {req.workplace}" + (f" ({', '.join(req.locations)})" if req.locations else ""),
@@ -132,7 +132,9 @@ def summarize(records: list[dict]) -> str:
     for rec in records:
         req = rec["requirements"]
         for k in fields:
-            fields[k][req[k]] += 1
+            # seniority is a list (older records: a string); a "Senior / Staff" posting counts under both
+            values = req[k] if isinstance(req[k], list) else [req[k]]
+            fields[k].update(values)
         for counter, items in ((must, req["must_have"]), (nice, req["nice_to_have"])):
             for r in items:
                 counter[r["name"]] += 1
@@ -194,7 +196,7 @@ def main(argv: list[str] | None = None) -> int:
             try:
                 req = triage_one(llm, path, config, prompt_hash, cohort)
                 total = len(req.must_have) + len(req.nice_to_have)
-                print(f"[{i}/{len(paths)}] {path.name}: {req.seniority}, {req.source}, {total} requirements")
+                print(f"[{i}/{len(paths)}] {path.name}: {'/'.join(req.seniority)}, {req.source}, {total} requirements")
             except (ValidationError, LLMRefused) as e:
                 failed.append(path)
                 print(f"[{i}/{len(paths)}] {path.name}: FAILED {type(e).__name__}: {str(e).splitlines()[0]}")
