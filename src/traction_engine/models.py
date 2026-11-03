@@ -7,7 +7,7 @@ SENIORITY_ORDER = Seniority.__args__
 
 # Sites where employers post their own jobs: being found there makes a posting direct, not aggregated.
 # Repost sites (Dice, Built In relistings) are real aggregators and stay out. Add names as real postings show them.
-JOB_BOARDS = ("linkedin",)
+JOB_BOARDS = ("linkedin", "indeed")
 EmploymentType = Literal["full_time", "contract", "contract_to_hire", "part_time", "unstated"]
 ContractTerms = Literal["w2", "1099", "c2c", "unstated"]
 Source = Literal["direct", "agency", "aggregator", "unstated"]

@@ -154,7 +154,7 @@ def test_summary_counts_a_range_under_each_level():
     assert "seniority: 2 senior, 1 staff" in text
 
 
-@pytest.mark.parametrize("name", ["LinkedIn", "LinkedIn Jobs", "linkedin.com"])
+@pytest.mark.parametrize("name", ["LinkedIn", "LinkedIn Jobs", "linkedin.com", "Indeed", "indeed.com"])
 def test_job_board_is_not_an_intermediary(name):
     r = Requirements(**{**req().model_dump(), "source": "aggregator", "intermediary": name})
     assert (r.source, r.intermediary) == ("direct", None)
@@ -164,3 +164,9 @@ def test_real_aggregator_and_agency_are_kept():
     base = req().model_dump()
     assert Requirements(**{**base, "source": "aggregator", "intermediary": "Dice"}).intermediary == "Dice"
     assert Requirements(**{**base, "source": "agency", "intermediary": "Beacon Hill"}).source == "agency"
+
+
+def test_job_board_as_hiring_company_is_kept():
+    # Indeed's own postings: Indeed is the employer, not an intermediary.
+    r = Requirements(**{**req().model_dump(), "company": "Indeed", "source": "direct", "intermediary": None})
+    assert (r.company, r.source, r.intermediary) == ("Indeed", "direct", None)
