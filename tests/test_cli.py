@@ -170,3 +170,19 @@ def test_job_board_as_hiring_company_is_kept():
     # Indeed's own postings: Indeed is the employer, not an intermediary.
     r = Requirements(**{**req().model_dump(), "company": "Indeed", "source": "direct", "intermediary": None})
     assert (r.company, r.source, r.intermediary) == ("Indeed", "direct", None)
+
+
+@pytest.mark.parametrize("company, intermediary", [
+    ("DeepRec.ai", "DeepRec.ai"),
+    ("Lifted", "Lifted, an Upwork Company"),
+    ("Lifted, an Upwork Company", "Lifted"),
+])
+def test_intermediary_is_never_also_the_company(company, intermediary):
+    # An agency posting for an unnamed client: the model sometimes fills company with the agency's name.
+    r = Requirements(**{**req().model_dump(), "company": company, "source": "agency", "intermediary": intermediary})
+    assert (r.company, r.intermediary) == (None, intermediary)
+
+
+def test_named_client_is_kept_beside_its_agency():
+    r = Requirements(**{**req().model_dump(), "company": "Loancrate", "source": "agency", "intermediary": "deCircle"})
+    assert (r.company, r.intermediary) == ("Loancrate", "deCircle")

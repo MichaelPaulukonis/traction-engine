@@ -12,7 +12,12 @@ Fields:
 - employment_type: full_time, contract, contract_to_hire (also "C2H", "temp to perm"), part_time, or unstated.
 - contract_terms: w2, 1099, c2c (corp-to-corp), or unstated. Only when stated.
 - source: "agency" if a staffing firm or recruiter is representing the role (they place the candidate, e.g. a W-2 contract through them); "aggregator" if a site or company relisted another employer's posting without representing it (signs: the description is clearly another company's, or a note says it was listed under one name but belongs to another); "direct" if the hiring company posted it; otherwise "unstated".
-- intermediary: the agency or aggregator's name, if any. Null when source is "direct" or "unstated".
+  - Check who posted it against who is hiring. The poster is the name the posting is listed under: the heading (e.g. "# DeepRec.ai: AI Technical Lead" was posted by DeepRec.ai) or a line like "Posted by". It is "direct" only when the poster is the hiring company itself.
+  - The poster is an agency, even though its own name is on the posting, when the text calls the employer "our client", "a client", or "an enterprise client", says "we are partnered with" or "on behalf of", links to a recruiting platform (Paraform and the like), or the poster is a recruiting or staffing firm describing a different company's job. If the client is unnamed, company is null.
+  - A client that is the employer for this role means agency, not aggregator. A company describing its own business ("we advise clients", "a consulting firm serving clients") is still the employer and posted it direct.
+  - The poster is an aggregator when it reposts another company's own description word for word ("As an engineer at Capital One, you will...") without representing the role, e.g. an association, forum, or job feed.
+  - A company whose name mentions a parent ("Lifted, an Upwork Company") is still the poster; the parent is not an intermediary.
+- intermediary: the poster's name when source is "agency" or "aggregator", not a platform it links to. It is never also the company. Null when source is "direct" or "unstated".
 - workplace: remote, hybrid, onsite, or unstated. "Remote (US)" is remote.
 - locations: cities or regions named for the role. Empty list if none.
 - years_min: the smallest number of years required overall ("5+ years" is 5). Null if none.

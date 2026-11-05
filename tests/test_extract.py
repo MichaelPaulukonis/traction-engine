@@ -62,3 +62,10 @@ def test_second_failure_raises():
     with pytest.raises(ValidationError):
         extract(llm, "posting", model="m")
     assert len(llm.calls) == 2
+
+
+@pytest.mark.parametrize("source", ["agency", "aggregator"])
+def test_agency_or_aggregator_source_requires_a_named_intermediary(source):
+    data = VALID.model_dump()
+    with pytest.raises(ValidationError, match="no intermediary"):
+        Requirements.model_validate({**data, "source": source, "intermediary": None})

@@ -1,3 +1,4 @@
+import re
 from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -58,6 +59,19 @@ class Requirements(BaseModel):
             data = {**data, "intermediary": None, "source": "direct"}
         return data
 
+    # An agency posting for an unnamed client: the model sometimes puts the agency in company too.
+    # "Lifted" and "Lifted, an Upwork Company" are the same poster, so compare by prefix.
+    @model_validator(mode="before")
+    @classmethod
+    def intermediary_is_not_company(cls, data):
+        if not isinstance(data, dict):
+            return data
+        company, intermediary = (re.sub(r"[^a-z0-9]", "", (data.get(k) or "").lower())
+                                 for k in ("company", "intermediary"))
+        if company and intermediary and (company.startswith(intermediary) or intermediary.startswith(company)):
+            data = {**data, "company": None}
+        return data
+
     # Extractions saved before 2026-10-29 stored a single level as a string.
     @field_validator("seniority", mode="before")
     @classmethod
@@ -80,5 +94,10 @@ class Requirements(BaseModel):
             raise ValueError(
                 f"intermediary is {self.intermediary!r} but source is {self.source!r}; "
                 "use 'agency' or 'aggregator', or set intermediary to null"
+            )
+        if self.source in ("agency", "aggregator") and not self.intermediary:
+            raise ValueError(
+                f"source is {self.source!r} but no intermediary is named; "
+                "name the agency or aggregator, or use 'direct' if the hiring company posted it"
             )
         return self
