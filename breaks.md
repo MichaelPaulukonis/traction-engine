@@ -39,3 +39,13 @@ Four postings captured with the LinkedIn bookmarklet, extracted as `cohort: live
 - **The first fix overcorrected.** A blunt "any mention of a client means agency" rule turned Charles River Associates, a consulting firm describing its own clients, into `aggregator` with no intermediary. Caught by re-running all 63 previously-direct live postings: 1 changed. Narrowed the rule, and a validator now rejects `agency`/`aggregator` with no intermediary named, so that combination goes back through the retry.
 - **Still flips: which intermediary.** deCircle vs Paraform for the Loancrate posting (2:1 and 1:2 across two sets of runs). Both are defensible (poster vs the recruiting platform it links to); left alone.
 - **A call hung for 96 minutes.** Mid-regression, one extraction never returned and never reached `calls.jsonl`. The client had no explicit timeout (SDK default: 10 min per attempt plus retries, so this was past even that). Now `timeout=60, max_retries=2`; extractions take about 6s. Cause unknown; a silent hang is the failure the log can't see.
+
+## 2026-11-05: run-to-run variance
+
+First variance smoke test (`variance run`): 10 live postings x 5 runs, same prompt, $0.07. Five runs is a shakedown, not a measurement; no confidence intervals from this.
+
+- **Exact quote matching undercounted agreement.** Runs quote the same requirement but cut it off at different points ("experience defining AI model governance processes" vs the same phrase plus ", including lineage tracking"). Exact match scored that as three different requirements. Counting a quote as matching one that contains it (one-to-one, exact matches first) moved mean quote Jaccard from 0.71 to 0.84. Name Jaccard is 0.58: the runs mostly find the same requirements but label them differently, so name normalization is the bigger gap.
+- **Requirement counts swing.** Mean stdev of the total is 1.2, but ITSMF ranged 17 to 27, all of it in nice-to-have. No requirement moved between must-have and nice-to-have across runs.
+- **`source` still flips on one recruiter.** Motion Recruitment came back `agency` in some runs and `unstated` with no intermediary in others. The validator only catches the reverse case.
+- **`locations` truncated.** In 4 of 10 postings some runs listed every city and others only the first. ITSMF lost "Remote" in some runs, which matters for matching.
+- **`years_min` picks a different number** when a posting lists several (Capital One 2 vs 4, Motion Recruitment 2 vs 5).
