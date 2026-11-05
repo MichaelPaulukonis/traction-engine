@@ -175,7 +175,9 @@ def main(argv: list[str] | None = None) -> int:
         parser.print_help()
         return 1
 
-    client = anthropic.Anthropic(auth_token=api_key(config), base_url=config["base_url"])
+    # SDK default is 10 min per attempt; one call hung 96 min on 2026-11-04. Extracts take ~5s.
+    client = anthropic.Anthropic(auth_token=api_key(config), base_url=config["base_url"],
+                                 timeout=60, max_retries=2)
     run_id = uuid.uuid4().hex[:8]
     llm = LLM(client, ROOT / config["log_path"], config["daily_cap_usd"], run_id)
     prompt_hash = hashlib.sha256(PROMPT_PATH.read_bytes()).hexdigest()[:12]
