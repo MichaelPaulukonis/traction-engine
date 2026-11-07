@@ -11,6 +11,7 @@ Metrics per posting:
   quote_jaccard    mean pairwise Jaccard of requirement quotes: did runs find the same requirements?
   quote_contained_jaccard  same, but a quote matches one that contains it (same phrase, cut shorter)
   name_jaccard     same, on requirement names: did runs also label them the same?
+  name_merged_jaccard  same, after merging spelling variants and aliases.yaml groups
   counts           must / nice / total per run
   placement_flips  quotes that are must-have in some runs and nice-to-have in others
   field_flips      non-requirement fields whose value differs across runs
@@ -19,7 +20,6 @@ Metrics per posting:
 import argparse
 import hashlib
 import json
-import re
 import statistics
 import sys
 import uuid
@@ -30,13 +30,10 @@ from pathlib import Path
 import anthropic
 from pydantic import ValidationError
 
+from traction_engine import aliases
+from traction_engine.aliases import norm
+
 REQUIREMENT_LISTS = ("must_have", "nice_to_have")
-
-
-def norm(s: str) -> str:
-    """Case, runs of whitespace, and surrounding punctuation don't count as differences."""
-    s = re.sub(r"\s+", " ", s.casefold()).strip()
-    return re.sub(r"^[\W_]+|[\W_]+$", "", s)
 
 
 def jaccard(a: set, b: set) -> float:
@@ -75,9 +72,10 @@ def _comparable(v):
     return tuple(sorted(v)) if isinstance(v, list) else v
 
 
-def score_posting(runs: list[dict]) -> dict:
+def score_posting(runs: list[dict], lookup: dict[str, str] | None = None) -> dict:
     quotes = [{norm(r["quote"]) for k in REQUIREMENT_LISTS for r in run[k]} for run in runs]
     names = [{norm(r["name"]) for k in REQUIREMENT_LISTS for r in run[k]} for run in runs]
+    merged = [{aliases.key(r["name"], lookup or {}) for k in REQUIREMENT_LISTS for r in run[k]} for run in runs]
 
     placements: dict[str, set[str]] = {}
     for run in runs:
@@ -96,6 +94,7 @@ def score_posting(runs: list[dict]) -> dict:
         "quote_jaccard": mean_pairwise_jaccard(quotes),
         "quote_contained_jaccard": mean_pairwise(quotes, contained_jaccard),
         "name_jaccard": mean_pairwise_jaccard(names),
+        "name_merged_jaccard": mean_pairwise_jaccard(merged),
         "must_counts": [len(run["must_have"]) for run in runs],
         "nice_counts": [len(run["nice_to_have"]) for run in runs],
         "total_counts": [len(run["must_have"]) + len(run["nice_to_have"]) for run in runs],
@@ -109,12 +108,13 @@ def _spread(counts: list[int]) -> str:
 
 
 def render(scores: dict[str, dict]) -> str:
-    lines = ["| posting | quote J | quote J (contained) | name J | must | nice | total | placement flips | field flips |",
-             "|---|---|---|---|---|---|---|---|---|"]
+    lines = ["| posting | quote J | quote J (contained) | name J | name J (merged) | must | nice | total "
+             "| placement flips | field flips |",
+             "|---|---|---|---|---|---|---|---|---|---|"]
     for stem, s in scores.items():
         flips = ", ".join(f"{k}: {' / '.join(map(str, v))}" for k, v in s["field_flips"].items())
         lines.append(f"| {stem[11:50]} | {s['quote_jaccard']:.2f} | {s['quote_contained_jaccard']:.2f} "
-                     f"| {s['name_jaccard']:.2f} "
+                     f"| {s['name_jaccard']:.2f} | {s['name_merged_jaccard']:.2f} "
                      f"| {_spread(s['must_counts'])} | {_spread(s['nice_counts'])} "
                      f"| {_spread(s['total_counts'])} | {len(s['placement_flips'])} | {flips or '-'} |")
     all_scores = list(scores.values())
@@ -129,6 +129,7 @@ def render(scores: dict[str, dict]) -> str:
         f"mean quote Jaccard (contained): "
         f"{statistics.mean(s['quote_contained_jaccard'] for s in all_scores):.3f}",
         f"mean name Jaccard:  {statistics.mean(s['name_jaccard'] for s in all_scores):.3f}",
+        f"mean name Jaccard (merged): {statistics.mean(s['name_merged_jaccard'] for s in all_scores):.3f}",
         f"mean total-count stdev: {statistics.mean(statistics.pstdev(s['total_counts']) for s in all_scores):.2f}",
         "postings with a field flip, by field: "
         + (", ".join(f"{k} {n}/{len(all_scores)}" for k, n in sorted(field_counts.items(), key=lambda kv: -kv[1]))
@@ -142,7 +143,8 @@ def score_dir(run_dir: Path) -> dict[str, dict]:
     for p in sorted(run_dir.glob("*.run*.json")):
         stem = p.name.rsplit(".run", 1)[0]
         by_posting.setdefault(stem, []).append(json.loads(p.read_text()))
-    return {stem: score_posting(runs) for stem, runs in by_posting.items() if len(runs) > 1}
+    lookup = aliases.load()
+    return {stem: score_posting(runs, lookup) for stem, runs in by_posting.items() if len(runs) > 1}
 
 
 def collect(paths: list[Path], n_runs: int) -> Path:

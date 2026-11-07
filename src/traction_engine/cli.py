@@ -29,6 +29,7 @@ import anthropic
 import yaml
 from pydantic import ValidationError
 
+from traction_engine import aliases
 from traction_engine.extract import PROMPT_PATH, extract
 from traction_engine.llm import LLM, BudgetExceeded, LLMRefused
 from traction_engine.models import Requirements
@@ -126,7 +127,9 @@ def triage_one(llm: LLM, path: Path, config: dict, prompt_hash: str, cohort: str
     return req
 
 
-def summarize(records: list[dict]) -> str:
+def summarize(records: list[dict], lookup: dict[str, str] | None = None) -> str:
+    """Names are merged through aliases.yaml (lookup) and spelling variants before counting."""
+    tally = aliases.Tally(lookup or {})
     must, nice, option = Counter(), Counter(), Counter()
     fields = {k: Counter() for k in ("seniority", "employment_type", "source", "workplace")}
     for rec in records:
@@ -137,18 +140,18 @@ def summarize(records: list[dict]) -> str:
             fields[k].update(values)
         for counter, items in ((must, req["must_have"]), (nice, req["nice_to_have"])):
             for r in items:
-                counter[r["name"]] += 1
+                counter[tally.add(r["name"])] += 1
                 for alt in r["alternatives"]:
-                    option[alt] += 1
+                    option[tally.add(alt)] += 1
 
     lines = [f"# Summary of {len(records)} postings", ""]
     for k, counter in fields.items():
         lines.append(f"- {k}: " + ", ".join(f"{count} {value}" for value, count in counter.most_common()))
     lines += ["", "| Requirement | Must | Nice | As an option |", "|---|---|---|---|"]
     names = must.keys() | nice.keys() | option.keys()
-    ranked = sorted(names, key=lambda n: (-(must[n] + nice[n] + option[n]), n.lower()))
+    ranked = sorted(names, key=lambda n: (-(must[n] + nice[n] + option[n]), tally.label(n).lower()))
     for n in ranked[:50]:
-        lines.append(f"| {n} | {must[n]} | {nice[n]} | {option[n]} |")
+        lines.append(f"| {tally.label(n)} | {must[n]} | {nice[n]} | {option[n]} |")
     return "\n".join(lines)
 
 
@@ -168,7 +171,7 @@ def main(argv: list[str] | None = None) -> int:
         records = [json.loads(p.read_text()) for p in sorted(reports.glob("*.json"))]
         if args.cohort:
             records = [r for r in records if r.get("cohort") == args.cohort]
-        print(summarize(records))
+        print(summarize(records, aliases.load()))
         return 0
 
     if args.posting is None and args.backfill is None:

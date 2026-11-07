@@ -49,3 +49,10 @@ First variance smoke test (`variance run`): 10 live postings x 5 runs, same prom
 - **`source` still flips on one recruiter.** Motion Recruitment came back `agency` in some runs and `unstated` with no intermediary in others. The validator only catches the reverse case.
 - **`locations` truncated.** In 4 of 10 postings some runs listed every city and others only the first. ITSMF lost "Remote" in some runs, which matters for matching.
 - **`years_min` picks a different number** when a posting lists several (Capital One 2 vs 4, Motion Recruitment 2 vs 5).
+
+## 2026-11-07: name aliases
+
+- **Spelling variants were the small problem.** Merging names that differ only in case, spacing, punctuation, or a trailing plural (`Node.js` / `NodeJS`, `REST API` / `REST APIs`) is now automatic. It moved run-to-run name Jaccard from 0.575 to 0.582, and distinct names across all saved extractions from 1387 to 1350. Runs rarely misspell; they relabel (`Git` vs `Version control`).
+- **Relabels need a human.** `aliases propose` suggests groups where one quote got different names across runs; `aliases.yaml` holds the ones I accepted (42 groups, 133 names). The first version proposed 414 groups, mostly junk: one quote listing "Python, Docker, AWS" is three requirements, not three names for one. A quote that any single extraction split is now skipped, leaving 52 real candidates.
+- **Name Jaccard 0.575 to 0.787, but that's tuned on the test data.** The aliases came from the same 5-run outputs they're scored on. A fresh variance run on other postings is the honest number. Across the whole corpus distinct names only drop to about 1318: the long tail of posting-specific phrases is still there.
+- **Degree requirements don't alias cleanly.** "Master's or PhD" is a master's for matching purposes (the lowest acceptable bar), so it sits under `Master's degree`, not `PhD degree`. Where a name could go under two canonicals, loading fails and lists every conflict.

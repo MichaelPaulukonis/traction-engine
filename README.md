@@ -29,6 +29,8 @@ uv sync
 uv run triage samples/2026.01.05.northwind-insurance.staff-ai-engineer.md   # one posting
 uv run triage --backfill samples                                          # a directory
 uv run triage --summary                                                   # counts across everything extracted
+uv run aliases propose                                                    # suggest name aliases for review
+uv run variance score reports/variance/<run>                              # re-score saved runs, free
 uv run pytest                                                             # unit tests, no API calls
 ```
 
