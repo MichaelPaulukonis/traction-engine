@@ -1,7 +1,7 @@
 import pytest
 from pydantic import ValidationError
 
-from traction_engine.extract import extract
+from traction_engine.extract import extract, poster
 from traction_engine.models import Requirements
 
 VALID = Requirements(
@@ -69,3 +69,35 @@ def test_agency_or_aggregator_source_requires_a_named_intermediary(source):
     data = VALID.model_dump()
     with pytest.raises(ValidationError, match="no intermediary"):
         Requirements.model_validate({**data, "source": source, "intermediary": None})
+
+
+CAPTURE = "# Motion Recruitment: Senior AI Engineer\n\nSource: LinkedIn, verbatim copy via bookmarklet.\n\nAn established organization..."
+
+
+def test_poster_only_from_bookmarklet_captures():
+    assert poster(CAPTURE) == "Motion Recruitment"
+    assert poster("# JLL: Staff Software Engineer\n\nmy notes") is None
+    assert poster("Source: LinkedIn, verbatim copy via bookmarklet.\n# Acme: Engineer") is None
+
+
+def test_unnamed_client_with_no_source_makes_the_poster_the_agency():
+    unstated = VALID.model_copy(update={"company": None, "source": "unstated", "intermediary": None})
+    req = extract(FakeLLM(unstated), CAPTURE, model="m")
+    assert (req.source, req.intermediary, req.company) == ("agency", "Motion Recruitment", None)
+
+
+@pytest.mark.parametrize("update", [{"company": "Acme", "source": "unstated"}, {"company": None, "source": "direct"}])
+def test_poster_rule_leaves_named_companies_and_stated_sources_alone(update):
+    req = VALID.model_copy(update={"intermediary": None, **update})
+    assert extract(FakeLLM(req), CAPTURE, model="m") == req
+
+
+def test_poster_rule_ignores_hand_written_postings():
+    unstated = VALID.model_copy(update={"company": None, "source": "unstated", "intermediary": None})
+    assert extract(FakeLLM(unstated), "# JLL: Staff Engineer\n\nnotes", model="m").source == "unstated"
+
+
+def test_job_board_poster_stays_direct():
+    unstated = VALID.model_copy(update={"company": None, "source": "unstated", "intermediary": None})
+    text = CAPTURE.replace("Motion Recruitment", "LinkedIn")
+    assert extract(FakeLLM(unstated), text, model="m").source == "direct"

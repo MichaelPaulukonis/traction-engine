@@ -19,7 +19,7 @@ Fields:
   - A company whose name mentions a parent ("Lifted, an Upwork Company") is still the poster; the parent is not an intermediary.
 - intermediary: the poster's name when source is "agency" or "aggregator", not a platform it links to. It is never also the company. Null when source is "direct" or "unstated".
 - workplace: remote, hybrid, onsite, or unstated. "Remote (US)" is remote.
-- locations: cities or regions named for the role. Empty list if none.
+- locations: every city or region named for the role, in the order given. A capture's "Location:" line often shows only the first of several; use the full list from the posting body when there is one. Leave out "Remote" and "Remote, US": workplace says that. Empty list if none.
 - years_min: the smallest number of years required overall ("5+ years" is 5). Null if none.
 - domain: the industry, in one or two lowercase words. Null if unclear.
 - comp_min, comp_max, comp_period: pay as numbers, with period "year" or "hour". A single figure goes in both min and max. If several ranges are listed by location, take the lowest min and the highest max. Null and "unstated" if not listed.
