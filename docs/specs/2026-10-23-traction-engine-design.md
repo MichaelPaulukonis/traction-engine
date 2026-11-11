@@ -1,6 +1,6 @@
 # traction-engine: design
 
-Date: 2026-10-23, revised 2026-10-24 after an adversarial review (verdict: RESHAPE). Tracking: `hunting-m87` (Jev comparison: `hunting-m87.1`), in the private `hunting` repo.
+Date: 2026-10-23, revised 2026-10-24 after an adversarial review (verdict: RESHAPE). Tracking: beads in this repo since 2026-11-11 (`bd list`); before that, `hunting-m87` in the private `hunting` repo.
 
 ## Purpose
 
