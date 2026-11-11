@@ -30,7 +30,6 @@ skills:
   - id: typescript
     name: TypeScript
     tier: primary             # primary -> met, familiar -> partial
-    aliases: [TS]
     evidence: "Travelers microservices; Aetna starter kit (ledger: Backed)"
   - id: insurance-domain
     name: Insurance
@@ -38,15 +37,17 @@ skills:
     evidence: "Travelers 2017-2025, Insurity"
 ```
 
-- `skills build` generates a first draft once: one LLM call over the canonical resume's skills section and the ledger, about $0.01. It is then hand-reviewed and hand-extended, with domain knowledge and soft skills added, since without entries those will match as `missing`. It is never regenerated automatically.
-- Loading fails if one alias points at two skills, the same rule as `aliases.yaml`.
+- **Drafted once in an agent session, not by a CLI command.** The agent reads the canonical resume's skills section and the ledger, writes `skills.yaml`, and the owner reviews it and extends it by hand, adding domain knowledge and soft skills, since without entries those will match as `missing`. It is never regenerated: regenerating would wipe hand edits, so later resume changes are applied by hand. A one-off doesn't need a command, a prompt file, and tests.
+- **No aliases in `skills.yaml`.** Skill names use the canonical names from `aliases.yaml`, which stays the only list of synonyms (different labels for the same thing). New synonyms go there, so `--summary` benefits too.
+- **No coverage mappings yet** ("this skill satisfies that requirement", e.g. Lambda covering "serverless"). Those aren't synonyms, so they must not go in `aliases.yaml`, where they would distort `--summary` counts. The LLM pass handles them for now. Add a `covers:` list per skill only if logs show the LLM repeatedly missing, or flipping on, the same requirement.
+- Skill names must be unique after `aliases.norm` normalization; loading fails otherwise.
 - The `profile` values above are defaults to confirm, not decisions.
 
 ### Matching: `match.py`
 
 `match(requirements: Requirements, skills: Skills) -> Match`
 
-1. **Deterministic pass.** Normalize each requirement name with `aliases.norm` and `aliases.yaml`, then look it up against skill names and aliases. An either/or requirement matches if any of its `alternatives` matches. A primary-tier skill gives `met`; a familiar-tier skill gives `partial`.
+1. **Deterministic pass.** Normalize each requirement name with `aliases.norm` and `aliases.yaml`, then look it up against skill names. An either/or requirement matches if any of its `alternatives` matches. A primary-tier skill gives `met`; a familiar-tier skill gives `partial`. This pass exists for **consistency, not cost**: common skills (Python, AWS, TypeScript) get the same verdict on every posting. It rarely saves the LLM call, because nearly every posting has some long-tail, posting-specific requirement that won't match a skill name.
 2. **LLM pass, for what is left.** One call per posting, only if anything is unmatched. Model: Haiku via the existing wrapper (cost log, budget cap, schema validation, one retry). Input: the unmatched requirements (name and quote) plus a compact skills list (id, name, tier, evidence), delimited as data. Output per requirement: `verdict` (`met` / `partial` / `missing` / `unsure`), `skill_id`, `reason`.
 3. **Code-side guards**, which put "a false `met` is worse than a false `missing`" into code instead of the prompt:
    - a `met` or `partial` whose `skill_id` doesn't exist in `skills.yaml` becomes `unsure`;
@@ -78,11 +79,11 @@ Plain code, not a LangGraph graph. An earlier plan (`hunting-m87.3`) proposed bu
 
 Unit tests with a fake LLM, following the existing pattern. Cases:
 
-- alias hits and either/or alternatives;
+- name hits via `aliases.yaml` synonyms, and either/or alternatives;
 - the downgrade rules (unknown `skill_id`, `met` on a familiar skill);
 - each flag rule, including `unstated` never flagging;
 - score edge cases (no must-haves, all partial);
-- a `skills.yaml` with a conflicting alias fails to load.
+- a `skills.yaml` with duplicate skill names (after normalization) fails to load.
 
 No match eval in M2b. Verdict errors found in daily use get logged in `breaks.md` and seed the later match golden set.
 
