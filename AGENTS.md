@@ -1,27 +1,83 @@
-# Agent Instructions
+# AGENTS.md
 
-This project uses **bd** (beads) for issue tracking. Run `bd prime` for full workflow context.
+Shared rulebook for every coding agent in this repo (Claude Code, Antigravity). Edit only this file - CLAUDE.md just imports it. Keep it under 12,000 characters (Antigravity's rule-file cap).
 
-> **Architecture in one line:** Issues live in a local Dolt database
-> (`.beads/dolt/`); cross-machine sync uses `bd dolt push/pull` (a
-> git-compatible protocol), stored under `refs/dolt/data` on your git
-> remote — separate from `refs/heads/*` where your code lives.
-> `.beads/issues.jsonl` is a passive export, not the wire protocol.
->
-> See [sync-concepts](https://github.com/gastownhall/beads/blob/main/docs/core-concepts/sync-concepts.md)
-> for the one-screen overview and anti-patterns (don't treat JSONL as the
-> source of truth; don't `bd import` during normal operation; don't
-> reach for third-party Dolt hosting before trying the default).
+## Start of Session
 
-## Quick Reference
+1. Run `bd prime` before touching anything. Claude Code does this via hook; Antigravity must run it itself.
+2. `bd ready`, pick a bead, `bd update <id> --claim`.
+
+## Before You Stop (Handoff)
+
+Always, even mid-task, leave a note on the bead you worked:
 
 ```bash
-bd ready              # Find available work
-bd show <id>          # View issue details
-bd update <id> --claim  # Claim work atomically
-bd close <id>         # Complete work
-bd dolt push          # Push beads data to remote
+bd update <id> --append-notes "DONE: ... / NOT DONE: ... / NEXT: ..."
 ```
+
+Use `--append-notes`, never `--notes` (it silently replaces). Questions for the maintainer go in the same note, prefixed `QUESTION:`.
+
+## Decisions
+
+Settled choices are stored as `bd remember --key decision-<slug> "..."` and show up in `bd prime`. Never change or `bd forget` a `decision-*` memory. If you disagree, say so in your handoff note and keep following it.
+
+## Concurrency
+
+One agent per working tree at a time. `--claim` locks a task, not files. Parallel work needs a separate git worktree.
+
+## Git Profile: Team-Maintainer
+
+This repo opts into the `team-maintainer` profile (sole maintainer). Agents may close beads, commit, and push (`git push`, `bd dolt push`) at session close. A "don't commit" or "don't push" instruction in the current session still wins. Never force-push.
+
+## What this is
+
+A job-posting triage pipeline, and a public 30-day experiment in operating an LLM tool and logging what breaks. Design: `docs/specs/2026-10-23-traction-engine-design.md` (parent) and `docs/specs/2026-11-11-m2-match-design.md` (M2: match first, slim eval after). Failure log: `breaks.md`. The 30-day clock started 2026-10-27.
+
+A pipeline, not an agent: each step takes and returns Pydantic models (`models.py`) and is testable on its own. M1 `extract` is done. M2b `skills.yaml` + `match` is next, then a slim extraction eval (M2a), then M3 `retrieve`.
+
+## Public repo, private data
+
+This repo is public. Real data lives in the private `~/Documents/hunting` repo, and `config.local.yaml` (gitignored) points at it.
+
+- Never commit or quote real posting text, resume content, `skills.yaml`, `reports/`, `calls.jsonl`, or anything from `hunting/`. `samples/` holds the only postings allowed in this repo, and they are synthetic.
+- `breaks.md` and other public docs report aggregates and paraphrased failures. Naming the posting company is fine (it's already done); quoting private posting text is not.
+- The LinkedIn bookmarklet that produces live postings lives in `hunting/linkedin/extractor/`, kept out of this repo on purpose.
+
+## Commands
+
+```bash
+uv sync
+uv run pytest                                   # unit tests, fake LLM, no API cost
+uv run triage <posting.md>                      # extract one posting -> reports/<stem>.md + .json
+uv run triage --backfill [DIR ...]              # all postings in configured or given dirs
+uv run triage --summary [--cohort live]         # requirement frequencies
+uv run variance run [--runs 5] <posting ...>    # run-to-run stability -> reports/variance/<ts>/
+uv run variance score <dir>                     # re-score a saved variance run, free
+uv run aliases propose                          # suggest name aliases for aliases.yaml
+```
+
+Real runs call OpenRouter and cost money (about $0.001 per posting with Haiku 5.5). The wrapper enforces `daily_cap_usd`. Tell the user the scope and rough cost before runs over many postings (backfills, variance, re-extraction).
+
+## Conventions
+
+- **Every LLM call goes through `llm.py`.** It logs each call to `calls.jsonl` (tokens, cost from OpenRouter's `usage.cost`, latency), checks the daily cap, and validates after logging so failed billed calls still get logged. No step talks to the SDK directly. Keep the wrapper small and hand-written; that's part of what the repo demonstrates.
+- Model IDs and effort levels live in `config.yaml`, not in code.
+- Prompts live in `prompts/`. Each extraction stores a `prompt_hash`.
+- Postings are untrusted input: delimited as data, no tools, schema-only output.
+- When the model flips on something that has a right answer, prefer a deterministic rule or validator after the LLM over more prompt text (see `JOB_BOARDS`, `poster_is_intermediary`, `intermediary_is_not_company`). Re-run affected saved postings to check a rule doesn't overcorrect.
+- Extractions carry `cohort: backfill | live`. Don't mix their numbers.
+- Unit tests use fakes/recorded responses. Evals (model behavior) stay separate from unit tests.
+- When a real run surprises you, add a dated entry to `breaks.md`: what broke, why, what changed, with numbers. Plain prose, no hype.
+
+## Ownership
+
+Code is written with Claude Code. Prompts, eval design, and guardrail thresholds are the author's calls, since those are what interviewers ask about. Propose them with reasoning; don't settle them silently.
+
+## Task tracking and history
+
+Beads in this repo are public: `bd dolt push` stores them under `refs/dolt/data` on the public GitHub origin. Write them as engineering issues only - no posting text, no apply/skip decisions, no recruiter or job-search details. Those stay in the private `~/Documents/hunting` beads (epic `hunting-m87`, the job-search-level tracker for this project, plus study beads `hunting-d20` RAG and `hunting-pwd` prompt injection).
+
+History before 2026-11-11 lives in `hunting`: the `hunting-m87` notes trail and `hunting/notes/2026.10.25.portfolio-plan-traction-engine.md`.
 
 ## Non-Interactive Shell Commands
 
