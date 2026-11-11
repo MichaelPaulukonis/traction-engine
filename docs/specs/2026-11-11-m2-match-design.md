@@ -15,7 +15,7 @@ Why: an adversarial review of the full M2a design (prosecution, defense, judge; 
 
 ### Skills inventory: `skills.yaml`
 
-Private, lives in `hunting/`; `skills_path` in `config.local.yaml` points at it.
+Private, lives in `hunting/`; `skills_path` in `config.local.yaml` points at it (omitted in public `config.yaml`). `config.yaml` adds `models.match` and `effort.match` (Haiku 5.5 at `low`, matching `extract`).
 
 Source: `hunting/resume/canonical_resume.md` (Technical Skills section, tiered by the rule "Primary = could do it live in a technical screen today; Familiar = used in real work") plus `hunting/resume/claims_ledger.md` (each claim traced to a graded fact). Both are already hand-reviewed, so the inventory is built from them instead of having an LLM derive skills freely from resume text, as the parent spec proposed.
 
@@ -27,38 +27,38 @@ profile:                      # inputs for flags, not skills
   locations_ok: [Boston, Framingham, MA]
   contract_ok: [full_time, contract_to_hire, contract]
 skills:
-  - id: typescript
-    name: TypeScript
+  - name: TypeScript
     tier: primary             # primary -> met, familiar -> partial
     evidence: "Travelers microservices; Aetna starter kit (ledger: Backed)"
-  - id: insurance-domain
-    name: Insurance
+  - name: Insurance
     tier: primary
     evidence: "Travelers 2017-2025, Insurity"
 ```
 
 - **Drafted once in an agent session, not by a CLI command.** The agent reads the canonical resume's skills section and the ledger, writes `skills.yaml`, and the owner reviews it and extends it by hand, adding domain knowledge and soft skills, since without entries those will match as `missing`. It is never regenerated: regenerating would wipe hand edits, so later resume changes are applied by hand. A one-off doesn't need a command, a prompt file, and tests.
-- **No aliases in `skills.yaml`.** Skill names use the canonical names from `aliases.yaml`, which stays the only list of synonyms (different labels for the same thing). New synonyms go there, so `--summary` benefits too.
+- **No `id` or `aliases` in `skills.yaml`.** `name` is the single identifier and uses the canonical name from `aliases.yaml`, which stays the only list of synonyms (different labels for the same thing). New synonyms go there, so `--summary` benefits too.
 - **No coverage mappings yet** ("this skill satisfies that requirement", e.g. Lambda covering "serverless"). Those aren't synonyms, so they must not go in `aliases.yaml`, where they would distort `--summary` counts. The LLM pass handles them for now. Add a `covers:` list per skill only if logs show the LLM repeatedly missing, or flipping on, the same requirement.
-- Skill names must be unique after `aliases.norm` normalization; loading fails otherwise.
+- Skill names must be unique after `aliases.key(name, lookup)` normalization (which applies `aliases.yaml` and `aliases.spelling_key`); loading fails otherwise.
 - The `profile` values above are defaults to confirm, not decisions.
 
 ### Matching: `match.py`
 
 `match(requirements: Requirements, skills: Skills) -> Match`
 
-1. **Deterministic pass.** Normalize each requirement name with `aliases.norm` and `aliases.yaml`, then look it up against skill names. An either/or requirement matches if any of its `alternatives` matches. A primary-tier skill gives `met`; a familiar-tier skill gives `partial`. This pass exists for **consistency, not cost**: common skills (Python, AWS, TypeScript) get the same verdict on every posting. It rarely saves the LLM call, because nearly every posting has some long-tail, posting-specific requirement that won't match a skill name.
-2. **LLM pass, for what is left.** One call per posting, only if anything is unmatched. Model: Haiku via the existing wrapper (cost log, budget cap, schema validation, one retry). Input: the unmatched requirements (name and quote) plus a compact skills list (id, name, tier, evidence), delimited as data. Output per requirement: `verdict` (`met` / `partial` / `missing` / `unsure`), `skill_id`, `reason`.
+1. **Deterministic pass.** Normalize `[r.name, *r.alternatives]` with `aliases.key(name, lookup)` and look up against skill keys. Take the best hit across the requirement and its `alternatives` (`met` > `partial`): a primary-tier skill gives `met`, a familiar-tier skill gives `partial`. Any hit (`met` or `partial`) short-circuits the LLM pass for that requirement. This pass exists for **consistency, not cost**: common skills (Python, AWS, TypeScript) get the same verdict on every posting. It rarely saves the LLM call, because nearly every posting has some long-tail, posting-specific requirement that won't match a skill name.
+2. **LLM pass, for what is left.** One call per posting, only if anything is unmatched. Model: Haiku via the existing wrapper (cost log, budget cap, schema validation, one retry). Input: the unmatched requirements (`index` `0..N-1`, `name`, `alternatives` if any, and `quote`) plus a compact skills list (`name`, `tier`, `evidence`), delimited as data. Output per requirement: `index`, `verdict` (`met` / `partial` / `missing` / `unsure`), `skill` (nullable), `reason`. Pydantic validates that returned indices match `0..N-1` one-to-one so joining back never depends on the model echoing requirement names verbatim.
 3. **Code-side guards**, which put "a false `met` is worse than a false `missing`" into code instead of the prompt:
-   - a `met` or `partial` whose `skill_id` doesn't exist in `skills.yaml` becomes `unsure`;
-   - a `met` that cites a familiar-tier skill becomes `partial`.
+   - resolve `skill` through `aliases.key(skill, lookup)` against `skills.yaml` so casing or synonym variants (`"typescript"`, `"TS"`) resolve to `"TypeScript"`;
+   - a `met` or `partial` whose `skill` is null or doesn't resolve to a skill in `skills.yaml` becomes `unsure`;
+   - a `met` that resolves to a familiar-tier skill becomes `partial`;
+   - `skill` on `missing` or `unsure` is cleared to `null`.
 4. **Flags**, computed by rules with no LLM, and kept separate from the score:
    - `years_min` greater than profile years;
    - seniority with no overlap with the profile;
-   - workplace not acceptable, or hybrid/onsite outside `locations_ok`;
+   - workplace not in `workplace_ok`, or hybrid/onsite with non-empty `locations` where **no** listed location matches `locations_ok` on word/token boundaries (so `"MA"` matches `"Boston, MA"` but not `"Madison, WI"`, and `["New York, NY", "Boston, MA"]` passes);
    - `employment_type` not in `contract_ok`.
 
-   A field that is `unstated` never raises a flag.
+   A field that is `unstated` (or empty `locations`) never raises a flag.
 5. **Score**: must-have coverage, (met + 0.5 × partial) / count of must-haves. Nice-to-haves are shown but not scored, because weighting them would be invented precision. With no must-haves, the score is `null` and the report shows a warning instead of 100%.
 
 Sonnet only if Haiku's verdicts prove bad in use.
@@ -67,23 +67,23 @@ Plain code, not a LangGraph graph. An earlier plan (`hunting-m87.3`) proposed bu
 
 ### CLI and storage
 
-- `triage posting.md` runs extract and then match whenever `skills_path` is configured. The report gains a fit section:
+- `triage posting.md` (and `triage --backfill`) runs extract and then match whenever `skills_path` is configured. The report (`reports/<stem>.md`) gains a fit section:
   - a headline, e.g. `Fit 72% | Must 6✓ 2~ 1✗ (Kubernetes) 1? | flags: onsite NYC`;
   - a must-have table (requirement, verdict, evidence);
   - a nice-to-have table.
-- Match results are saved as `reports/<stem>.match.json`, recording the `skills.yaml` hash and the extraction run ID.
-- `triage --rematch` re-runs match over saved extractions with no new extraction calls, for after `skills.yaml` edits.
+- Match results are stored under the `"match"` key inside `reports/<stem>.json` (recording `skills_hash`, `matched_at`, `run_id`, `score`, `flags`, `must_have`, `nice_to_have`), keeping one JSON and one Markdown file per posting so `reports.glob("*.json")` in `--summary`, `--rematch`, and `--rank` reads a single record without file-glob collisions or cross-file joins.
+- `triage --rematch` re-runs match over saved extractions in `reports/*.json` with no new extraction calls, updating `"match"` and re-rendering `reports/<stem>.md` after `skills.yaml` edits.
 - `triage --rank [--since DATE]` prints a table of postings sorted by score, with flags and the top missing must-haves. This is the daily view.
 
 ### Testing
 
 Unit tests with a fake LLM, following the existing pattern. Cases:
 
-- name hits via `aliases.yaml` synonyms, and either/or alternatives;
-- the downgrade rules (unknown `skill_id`, `met` on a familiar skill);
-- each flag rule, including `unstated` never flagging;
+- name hits via `aliases.yaml` synonyms, and either/or alternatives (best hit wins, any hit short-circuits LLM);
+- the downgrade rules (unknown/null `skill`, synonym/case resolution on `skill`, `met` on a familiar skill);
+- each flag rule, including `unstated` never flagging, multi-location hybrid/onsite, and token-boundary matching on state abbreviations (`"MA"` vs `"Madison, WI"`);
 - score edge cases (no must-haves, all partial);
-- a `skills.yaml` with duplicate skill names (after normalization) fails to load.
+- a `skills.yaml` with duplicate skill names (after `aliases.key` normalization) fails to load.
 
 No match eval in M2b. Verdict errors found in daily use get logged in `breaks.md` and seed the later match golden set.
 
