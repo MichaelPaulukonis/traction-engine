@@ -1,4 +1,4 @@
-# Defaults for the public repo. Put private paths (postings_dir) in
+# Defaults for the public repo. Put private paths (postings_dirs, skills_path) in
 # config.local.yaml, which is gitignored and overrides these values.
 
 daily_cap_usd: 2.00
@@ -9,9 +9,11 @@ reports_dir: reports
 
 models:
   extract: anthropic/claude-haiku-5.5
+  match: anthropic/claude-haiku-5.5
 
 effort:
   extract: low
+  match: low
 
 postings_dirs: [samples]
 postings_glob: ["*.md", "*.txt"]

@@ -186,3 +186,148 @@ def test_intermediary_is_never_also_the_company(company, intermediary):
 def test_named_client_is_kept_beside_its_agency():
     r = Requirements(**{**req().model_dump(), "company": "Loancrate", "source": "agency", "intermediary": "deCircle"})
     assert (r.company, r.intermediary) == ("Loancrate", "deCircle")
+
+
+# M2b: match in triage, --rematch, --rank
+
+from traction_engine.models import Match, RequirementMatch
+
+SKILLS_YAML = """
+profile: {years: 15, seniority: [senior], workplace_ok: [remote], locations_ok: [Boston], contract_ok: [full_time]}
+skills:
+  - {name: Python, tier: primary, evidence: py}
+"""
+
+
+def rmatch(name, verdict, via="alias", skill=None, evidence=None, reason=None):
+    return RequirementMatch(name=name, alternatives=[], quote=name, verdict=verdict, skill=skill,
+                            evidence=evidence, reason=reason, via=via)
+
+
+def a_match(score=0.5, skills_hash="current", flags=(), must=None, nice=()):
+    must = must if must is not None else [rmatch("Python", "met", skill="Python", evidence="py"),
+                                          rmatch("Kubernetes", "missing", via="llm", reason="none")]
+    return Match(skills_hash=skills_hash, matched_at="t", run_id="r", score=score, flags=list(flags),
+                 must_have=must, nice_to_have=list(nice))
+
+
+@pytest.fixture
+def matched(project, monkeypatch):
+    """project with skills_path set and match faked; returns the list of requirements matched."""
+    (project / "skills.yaml").write_text(SKILLS_YAML)
+    base = cli.load_config()
+    monkeypatch.setattr(cli, "load_config", lambda: {
+        **base, "skills_path": "skills.yaml", "models": {"extract": "m", "match": "m"},
+        "effort": {"extract": "low", "match": "low"},
+    })
+    monkeypatch.setattr(cli, "skills_hash", lambda path: "current")
+    seen = []
+
+    def _match(llm, req, skills, **kw):
+        seen.append(req)
+        return a_match(skills_hash=kw["skills_hash"])
+    monkeypatch.setattr(cli, "match", _match)
+    return seen
+
+
+def test_without_skills_path_there_is_no_match(project, monkeypatch):
+    extract, _ = fake_extract([req()])
+    monkeypatch.setattr(cli, "extract", extract)
+    cli.main([str(project / "postings" / "2026.01.01.a.md")])
+    assert "match" not in json.loads((project / "reports" / "2026.01.01.a.json").read_text())
+    assert "## Fit" not in (project / "reports" / "2026.01.01.a.md").read_text()
+
+
+def test_rematch_without_skills_path_exits(project):
+    with pytest.raises(SystemExit, match="skills_path"):
+        cli.main(["--rematch"])
+
+
+def test_triage_runs_match_when_configured(project, monkeypatch, matched):
+    extract, _ = fake_extract([req(), req(), req()])
+    monkeypatch.setattr(cli, "extract", extract)
+    assert cli.main(["--backfill"]) == 0
+    assert len(matched) == 3
+    record = json.loads((project / "reports" / "2026.01.01.a.json").read_text())
+    assert record["match"]["skills_hash"] == "current"
+    assert "## Fit" in (project / "reports" / "2026.01.01.a.md").read_text()
+
+
+def test_fit_section_rendering():
+    m = a_match(score=0.7, flags=["hybrid: New York, NY"], must=[
+        rmatch("Python", "met", skill="Python", evidence="Acme | Beta"),
+        rmatch("Serverless", "partial", via="llm", skill="AWS Lambda", evidence="ev", reason="close"),
+        rmatch("Kubernetes", "missing", via="llm", reason="no k8s"),
+        rmatch("Vague", "unsure", via="llm"),
+    ])
+    text = cli.render_report(Path("p.md"), req(), None, m)
+    assert "Fit 70% | Must 1✓ 1~ 1✗ (Kubernetes) 1? | flags: hybrid: New York, NY" in text
+    assert "| Requirement | Verdict | Evidence |" in text
+    assert "| Python | met | Python - Acme \\| Beta |" in text
+    assert "| Serverless | partial | AWS Lambda - close (ev) |" in text
+    assert "| Kubernetes | missing | no k8s |" in text
+    assert "| Vague | unsure |  |" in text
+
+
+def test_fit_section_without_must_haves_warns():
+    text = cli.render_report(Path("p.md"), req(), None, a_match(score=None, must=[]))
+    assert "Fit n/a" in text
+    assert "no must-haves" in text
+    assert "flags: none" in text
+
+
+def write_record(reports, stem, score=None, skills_hash=None, posting_date="2026-01-01", **match_kw):
+    reports.mkdir(exist_ok=True)
+    rec = {"posting": f"postings/{stem}.md", "posting_date": posting_date, "warning": None,
+           "requirements": req().model_dump()}
+    if skills_hash:
+        rec["match"] = a_match(score=score, skills_hash=skills_hash, **match_kw).model_dump()
+    (reports / f"{stem}.json").write_text(json.dumps(rec))
+
+
+def test_rematch_skips_current_and_updates_the_rest(project, monkeypatch, matched):
+    reports = project / "reports"
+    write_record(reports, "a", 0.5, "current")
+    write_record(reports, "b", 0.5, "old")
+    write_record(reports, "c")
+    monkeypatch.setattr(cli, "extract", lambda *a, **k: pytest.fail("rematch must not extract"))
+    assert cli.main(["--rematch"]) == 0
+    assert len(matched) == 2
+    assert json.loads((reports / "b.json").read_text())["match"]["skills_hash"] == "current"
+    assert "## Fit" in (reports / "c.md").read_text()
+    assert not (reports / "a.md").exists()
+
+    matched.clear()
+    assert cli.main(["--rematch", "--force"]) == 0
+    assert len(matched) == 3
+
+
+def test_rematch_budget_exceeded_stops(project, monkeypatch, matched):
+    reports = project / "reports"
+    write_record(reports, "a")
+    write_record(reports, "b")
+
+    def _match(llm, req, skills, **kw):
+        raise BudgetExceeded("cap")
+    monkeypatch.setattr(cli, "match", _match)
+    assert cli.main(["--rematch"]) == 2
+
+
+def test_rank_sorts_by_score_filters_by_date_and_needs_no_key(project, monkeypatch, capsys):
+    monkeypatch.setattr(cli, "api_key", lambda config: pytest.fail("--rank must work offline"))
+    reports = project / "reports"
+    write_record(reports, "low", 0.2, "h", flags=["workplace: onsite"])
+    write_record(reports, "high", 0.9, "h")
+    write_record(reports, "none", None, "h", must=[])
+    write_record(reports, "old", 1.0, "h", posting_date=None)
+    write_record(reports, "unmatched")
+    assert cli.main(["--rank"]) == 0
+    out = capsys.readouterr().out
+    rows = [line for line in out.splitlines() if line.startswith("| ") and "Fit |" not in line]
+    assert [row.split("|")[2].strip() for row in rows] == ["old", "high", "low", "none"]
+    assert "workplace: onsite" in out
+    assert "Kubernetes" in out
+
+    cli.main(["--rank", "--since", "2026-01-01"])
+    out = capsys.readouterr().out
+    assert "| old |" not in out and "| high |" in out

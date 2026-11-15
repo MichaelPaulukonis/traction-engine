@@ -17,7 +17,16 @@ import yaml
 from pydantic import BaseModel, Field, ValidationError, model_validator
 
 from traction_engine import aliases
-from traction_engine.models import Match, Profile, Requirement, RequirementMatch, Requirements, Skill, Skills, Verdict
+from traction_engine.models import (
+    Match,
+    Profile,
+    Requirement,
+    RequirementMatch,
+    Requirements,
+    Skill,
+    Skills,
+    Verdict,
+)
 
 PROMPT_PATH = Path(__file__).resolve().parents[2] / "prompts" / "match.md"
 TIER_VERDICT = {"primary": "met", "familiar": "partial"}

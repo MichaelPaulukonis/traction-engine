@@ -5,9 +5,22 @@ from pydantic import ValidationError
 
 from traction_engine import aliases
 from traction_engine.match import (
-    _match_deterministic, compute_flags, compute_score, load_skills, match, skills_hash,
+    _match_deterministic,
+    compute_flags,
+    compute_score,
+    load_skills,
+    match,
+    skills_hash,
 )
-from traction_engine.models import Match, Profile, Requirement, RequirementMatch, Requirements, Skill, Skills
+from traction_engine.models import (
+    Match,
+    Profile,
+    Requirement,
+    RequirementMatch,
+    Requirements,
+    Skill,
+    Skills,
+)
 
 
 def lookup_from(table: dict[str, list[str]]) -> dict[str, str]:
