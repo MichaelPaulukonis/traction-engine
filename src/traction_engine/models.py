@@ -101,3 +101,50 @@ class Requirements(BaseModel):
                 "name the agency or aggregator, or use 'direct' if the hiring company posted it"
             )
         return self
+
+
+# M2b match: skills.yaml inventory and per-posting match results.
+
+Tier = Literal["primary", "familiar"]
+Verdict = Literal["met", "partial", "missing", "unsure"]
+
+
+class Skill(BaseModel):
+    name: str
+    tier: Tier
+    evidence: str
+
+
+class Profile(BaseModel):
+    """Inputs for the rule-based flags, not skills."""
+    years: int
+    seniority: list[Seniority]
+    workplace_ok: list[Workplace]
+    locations_ok: list[str]
+    contract_ok: list[EmploymentType]
+
+
+class Skills(BaseModel):
+    profile: Profile
+    skills: list[Skill]
+
+
+class RequirementMatch(BaseModel):
+    name: str
+    alternatives: list[str]
+    quote: str
+    verdict: Verdict
+    skill: str | None
+    evidence: str | None = None
+    reason: str | None = None
+    via: Literal["alias", "llm"]
+
+
+class Match(BaseModel):
+    skills_hash: str
+    matched_at: str
+    run_id: str
+    score: float | None
+    flags: list[str]
+    must_have: list[RequirementMatch]
+    nice_to_have: list[RequirementMatch]
