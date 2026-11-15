@@ -33,7 +33,7 @@ This repo opts into the `team-maintainer` profile (sole maintainer). Agents may 
 
 A job-posting triage pipeline, and a public 30-day experiment in operating an LLM tool and logging what breaks. Design: `docs/specs/2026-10-23-traction-engine-design.md` (parent) and `docs/specs/2026-11-11-m2-match-design.md` (M2: match first, slim eval after). Failure log: `breaks.md`. The 30-day clock started 2026-10-27.
 
-A pipeline, not an agent: each step takes and returns Pydantic models (`models.py`) and is testable on its own. M1 `extract` is done. M2b `skills.yaml` + `match` is next, then a slim extraction eval (M2a), then M3 `retrieve`.
+A pipeline, not an agent: each step takes and returns Pydantic models (`models.py`) and is testable on its own. M1 `extract` and M2b `match` (`skills.yaml` via `skills_path` in `config.local.yaml`) are built. Next: a slim extraction eval (M2a), then M3 `retrieve`.
 
 ## Public repo, private data
 
@@ -51,6 +51,8 @@ uv run pytest                                   # unit tests, fake LLM, no API c
 uv run triage <posting.md>                      # extract one posting -> reports/<stem>.md + .json
 uv run triage --backfill [DIR ...]              # all postings in configured or given dirs
 uv run triage --summary [--cohort live]         # requirement frequencies
+uv run triage --rematch [--force]               # re-match saved extractions (LLM cost) after skills.yaml edits
+uv run triage --rank [--since YYYY-MM-DD]       # postings by fit, offline
 uv run variance run [--runs 5] <posting ...>    # run-to-run stability -> reports/variance/<ts>/
 uv run variance score <dir>                     # re-score a saved variance run, free
 uv run aliases propose                          # suggest name aliases for aliases.yaml

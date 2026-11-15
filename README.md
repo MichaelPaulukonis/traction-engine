@@ -18,7 +18,7 @@ The task has a fixed shape, so it's a pipeline: each step is small, testable, an
 
 ## Status
 
-M1 (extraction) is working. Started 2026-10-27 with a backfill over a year of saved postings: 95 postings, zero failures, and either $0.10 or $0.18 depending on which OpenRouter number you believe (see [breaks.md](breaks.md)). Matching against my skills, the eval set, and retrieval come next, in that order. Design: [docs/specs/2026-10-23-traction-engine-design.md](docs/specs/2026-10-23-traction-engine-design.md).
+M1 (extraction) is working. Started 2026-10-27 with a backfill over a year of saved postings: 95 postings, zero failures, and either $0.10 or $0.18 depending on which OpenRouter number you believe (see [breaks.md](breaks.md)). M2b (match) is built: each posting's requirements are checked against a private skills inventory, giving a must-have fit score, per-requirement verdicts, and rule-based flags (years, seniority, workplace/location, employment type). The slim extraction eval set and retrieval come next, in that order. Design: [docs/specs/2026-10-23-traction-engine-design.md](docs/specs/2026-10-23-traction-engine-design.md).
 
 ## Usage
 
@@ -29,6 +29,8 @@ uv sync
 uv run triage samples/2026.01.05.northwind-insurance.staff-ai-engineer.md   # one posting
 uv run triage --backfill samples                                          # a directory
 uv run triage --summary                                                   # counts across everything extracted
+uv run triage --rematch                                                   # re-match saved extractions after skills.yaml edits
+uv run triage --rank [--since 2026-11-01]                                 # postings by fit score, offline
 uv run aliases propose                                                    # suggest name aliases for review
 uv run variance score reports/variance/<run>                              # re-score saved runs, free
 uv run pytest                                                             # unit tests, no API calls
@@ -42,6 +44,7 @@ Each posting gets a Markdown report and a JSON record in `reports/`. The repo sh
 - **Structured output, validated after logging.** The model returns JSON against a Pydantic schema; a billed call that fails validation is still logged before it fails. One retry with the error fed back.
 - **Postings are untrusted input.** They're delimited as data, the call has no tools, and the output is schema-only.
 - **Either/or requirements stay either/or.** "React or Vue" is one requirement with two acceptable options, so the summary can tell "required" from "accepted".
+- **Match: lookup first, LLM for the rest, rules after.** Requirement names that resolve through `aliases.yaml` to a skill get a verdict with no LLM call, so common skills score the same on every posting. One call per posting judges the rest; code then downgrades any `met` the model can't tie to a real skill (or ties to a familiar-tier one), since a false `met` is worse than a false `missing`. Flags are plain rules, kept out of the score.
 - **Two cohorts.** The backfill archive was written by hand for me to read; live postings arrive verbatim. They're tagged separately, because numbers from one don't predict the other.
 
 Model: Claude Haiku 5.5, via OpenRouter, at low effort. About a tenth of a cent per posting.
