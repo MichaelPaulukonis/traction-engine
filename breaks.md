@@ -64,3 +64,12 @@ Variance re-run on the five postings with known flips (`reports/variance/2026-11
 - **Motion Recruitment's `source` is now a rule.** The model said `agency` 4 runs in 5; the fifth said `unstated` with no intermediary, which passes validation. Now a bookmarklet capture with no company and no source gets its poster (from the `# Poster: Title` heading) as the agency. Hand-written postings use the same heading style for other things, so only captures with the bookmarklet `Source:` line count. Re-run: `agency` 5/5. Replayed over 164 saved extractions: nothing changed, so it only catches the stray run.
 - **`locations` truncation mostly fixed by one prompt line.** The capture's `Location:` line shows only the first city; the prompt now says to use the posting's full list and to leave "Remote" to `workplace`. Capital One, deCircle and ITSMF are stable. Ropes & Gray still splits 3:2 between Boston alone and seven cities, but there the posting is ambiguous: the capture says Boston, while the pay table lists ranges for seven offices. Left alone.
 - **Fresh name Jaccard (merged): 0.701**, on outputs the aliases weren't proposed from (raw 0.571). Lower than the 0.787 on the tuning run, as expected; the aliases still help.
+
+## 2026-11-17: first match run (M2b)
+
+Extract + match on 36 new postings ($0.086, 0 failed), then `--rematch` over 195 saved extractions ($0.20, 4 failed). About $0.001 per posting for the match call, mostly the 63-skill inventory sent each time.
+
+- **Old records fail today's validators.** The 4 rematch failures were 2025 backfill records saved before the intermediary/source consistency validators existed. `--rematch` re-validates saved `requirements`, so they raise before any LLM call (no cost). Left as-is: old, hand-written, and re-extracting them is cheap if they ever matter.
+- **Verdict mix on the 36 new postings:** 184 of 633 verdicts (29%) came from the alias lookup with no LLM; of the LLM's 449, 157 missing, 182 partial, 104 met, 6 unsure. `unsure` is rarer than expected, which may mean the model commits too readily. Not yet spot-checked against the posting text.
+- **Flags almost never fire.** 1 flag across 36 postings (onsite). The profile accepts every workplace and contract type, and `unstated` seniority never flags, so flags currently carry little signal. Expected, not a bug.
+- **Duplicate captures got extracted twice.** Two browser-download `(1).md` copies have different stems from their originals, so the one-per-stem rule doesn't catch them.
