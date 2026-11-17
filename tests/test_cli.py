@@ -327,6 +327,7 @@ def test_rank_sorts_by_score_filters_by_date_and_needs_no_key(project, monkeypat
     assert [row.split("|")[2].strip() for row in rows] == ["old", "high", "low", "none"]
     assert "workplace: onsite" in out
     assert "Kubernetes" in out
+    assert (reports / "rank.md").read_text().startswith("# 4 matched postings")
 
     cli.main(["--rank", "--since", "2026-01-01"])
     out = capsys.readouterr().out

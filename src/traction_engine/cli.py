@@ -4,7 +4,7 @@
     triage --backfill [DIR ...]   extract every posting in DIRs (default: config postings_dirs)
     triage --summary [--cohort C] requirement frequencies across saved extractions
     triage --rematch [--force]    re-run match on saved extractions after skills.yaml edits
-    triage --rank [--since DATE]  matched postings sorted by fit score (offline)
+    triage --rank [--since DATE]  matched postings sorted by fit score, also saved to reports/rank.md (offline)
 
 When skills_path is configured, triage and --backfill run match after extract.
 
@@ -269,7 +269,10 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.rank:
         records = [json.loads(p.read_text()) for p in sorted(reports.glob("*.json"))]
-        print(rank([r for r in records if "match" in r], args.since))
+        table = rank([r for r in records if "match" in r], args.since)
+        (reports / "rank.md").write_text(table + "\n")
+        print(table)
+        print(f"\nsaved to {reports / 'rank.md'}")
         return 0
 
     skills_file = skills_path(config)
