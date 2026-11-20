@@ -132,9 +132,15 @@ def _llm_verdicts(llm, pending: list[Requirement], skills: Skills, *, model: str
     return sorted(out.items, key=lambda item: item.index)
 
 
+def _has_word(term: str, text: str | None) -> bool:
+    return bool(text) and re.search(rf"\b{re.escape(term)}\b", text, re.I) is not None
+
+
 def compute_flags(req: Requirements, profile: Profile) -> list[str]:
-    """Rule-based, no LLM. An unstated field (or empty locations) never flags."""
-    flags = []
+    """Rule-based, no LLM. An unstated field (or empty locations) never flags. Exclusions come first."""
+    flags = [f"excluded: {name}" for name in profile.exclude_companies
+             if _has_word(name, req.company) or _has_word(name, req.intermediary)]
+    flags += [f"excluded: {term}" for term in profile.exclude_domains if _has_word(term, req.domain)]
     if req.years_min is not None and req.years_min > profile.years:
         flags.append(f"years: {req.years_min}+ (profile: {profile.years})")
     named = [s for s in req.seniority if s != "unstated"]
@@ -144,7 +150,7 @@ def compute_flags(req: Requirements, profile: Profile) -> list[str]:
         if req.workplace not in profile.workplace_ok:
             flags.append(f"workplace: {req.workplace}")
         elif req.workplace in ("hybrid", "onsite") and req.locations and not any(
-            re.search(rf"\b{re.escape(ok)}\b", loc, re.I) for loc in req.locations for ok in profile.locations_ok
+            _has_word(ok, loc) for loc in req.locations for ok in profile.locations_ok
         ):
             flags.append(f"{req.workplace}: {', '.join(req.locations)}")
     if req.employment_type != "unstated" and req.employment_type not in profile.contract_ok:

@@ -332,3 +332,20 @@ def test_rank_sorts_by_score_filters_by_date_and_needs_no_key(project, monkeypat
     cli.main(["--rank", "--since", "2026-01-01"])
     out = capsys.readouterr().out
     assert "| old |" not in out and "| high |" in out
+
+
+def test_rank_hides_excluded_using_current_profile(project, monkeypatch, capsys):
+    (project / "skills.yaml").write_text(SKILLS_YAML.replace(
+        "contract_ok: [full_time]}", "contract_ok: [full_time], exclude_companies: [Anduril]}"))
+    base = cli.load_config()
+    monkeypatch.setattr(cli, "load_config", lambda: {**base, "skills_path": "skills.yaml"})
+    reports = project / "reports"
+    write_record(reports, "ok", 0.5, "h")
+    write_record(reports, "bad", 0.9, "h")
+    rec = json.loads((reports / "bad.json").read_text())
+    rec["requirements"]["company"] = "Anduril"
+    (reports / "bad.json").write_text(json.dumps(rec))
+    assert cli.main(["--rank"]) == 0
+    out = capsys.readouterr().out
+    assert "| ok |" in out and "| bad |" not in out
+    assert "1 excluded: bad (excluded: Anduril)" in out

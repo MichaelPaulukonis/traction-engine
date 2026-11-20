@@ -37,7 +37,7 @@ from pydantic import ValidationError
 from traction_engine import aliases
 from traction_engine.extract import PROMPT_PATH, extract
 from traction_engine.llm import LLM, BudgetExceeded, LLMRefused
-from traction_engine.match import load_skills, match, skills_hash
+from traction_engine.match import compute_flags, load_skills, match, skills_hash
 from traction_engine.models import Match, RequirementMatch, Requirements
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -198,10 +198,19 @@ def rematch_one(rec_path: Path, matcher: Matcher) -> Match:
     return match_res
 
 
-def rank(records: list[dict], since: str | None = None) -> str:
-    """Matched records, best fit first; no score sorts last."""
+def rank(records: list[dict], since: str | None = None, profile=None) -> str:
+    """Matched records, best fit first; no score sorts last.
+
+    With a profile, flags are recomputed from it (rules only, free), so skills.yaml edits
+    show up without a paid --rematch. Excluded postings are listed below the table, not in it.
+    """
     if since:
         records = [r for r in records if (r.get("posting_date") or "") >= since]
+    if profile:
+        for r in records:
+            r["match"]["flags"] = compute_flags(Requirements.model_validate(r["requirements"]), profile)
+    excluded = [r for r in records if any(f.startswith("excluded:") for f in r["match"]["flags"])]
+    records = [r for r in records if r not in excluded]
     records = sorted(records, key=lambda r: (r["match"]["score"] is None, -(r["match"]["score"] or 0)))
     lines = [f"# {len(records)} matched postings", "",
              "| Fit | Posting | Company | Title | Flags | Missing must-haves |", "|---|---|---|---|---|---|"]
@@ -213,6 +222,10 @@ def rank(records: list[dict], since: str | None = None) -> str:
             fit, Path(r["posting"]).stem, req.get("company") or "", req.get("title") or "",
             "; ".join(m["flags"]), ", ".join(missing[:3]) + (" ..." if len(missing) > 3 else ""),
         )) + " |")
+    if excluded:
+        lines += ["", f"{len(excluded)} excluded: " + ", ".join(
+            f"{Path(r['posting']).stem} ({'; '.join(f for f in r['match']['flags'] if f.startswith('excluded:'))})"
+            for r in excluded)]
     return "\n".join(lines)
 
 
@@ -269,7 +282,9 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.rank:
         records = [json.loads(p.read_text()) for p in sorted(reports.glob("*.json"))]
-        table = rank([r for r in records if "match" in r], args.since)
+        skills_file = skills_path(config)
+        profile = load_skills(skills_file).profile if skills_file else None
+        table = rank([r for r in records if "match" in r], args.since, profile)
         (reports / "rank.md").write_text(table + "\n")
         print(table)
         print(f"\nsaved to {reports / 'rank.md'}")
