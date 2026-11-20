@@ -30,7 +30,7 @@ uv run triage samples/2026.01.05.northwind-insurance.staff-ai-engineer.md   # on
 uv run triage --backfill samples                                          # a directory
 uv run triage --summary                                                   # counts across everything extracted
 uv run triage --rematch                                                   # re-match saved extractions after skills.yaml edits
-uv run triage --rank [--since 2026-11-01]                                 # postings by fit score, offline
+uv run triage --rank [--since 2026-11-01]                                 # postings by rank score -> reports/rank.md, offline
 uv run aliases propose                                                    # suggest name aliases for review
 uv run variance score reports/variance/<run>                              # re-score saved runs, free
 uv run pytest                                                             # unit tests, no API calls
@@ -44,7 +44,8 @@ Each posting gets a Markdown report and a JSON record in `reports/`. The repo sh
 - **Structured output, validated after logging.** The model returns JSON against a Pydantic schema; a billed call that fails validation is still logged before it fails. One retry with the error fed back.
 - **Postings are untrusted input.** They're delimited as data, the call has no tools, and the output is schema-only.
 - **Either/or requirements stay either/or.** "React or Vue" is one requirement with two acceptable options, so the summary can tell "required" from "accepted".
-- **Match: lookup first, LLM for the rest, rules after.** Requirement names that resolve through `aliases.yaml` to a skill get a verdict with no LLM call, so common skills score the same on every posting. One call per posting judges the rest; code then downgrades any `met` the model can't tie to a real skill (or ties to a familiar-tier one), since a false `met` is worse than a false `missing`. Flags are plain rules, kept out of the score; that includes hard exclusions (companies, industries) from the profile, which `--rank` hides.
+- **Match: lookup first, LLM for the rest, rules after.** Requirement names that resolve through `aliases.yaml` to a skill get a verdict with no LLM call, so common skills score the same on every posting. One call per posting judges the rest; code then downgrades any `met` the model can't tie to a real skill (or ties to a familiar-tier one), since a false `met` is worse than a false `missing`. Flags are plain rules, kept out of the score.
+- **Rank score = skills fit + preferences.** Skills are only part of whether a posting is worth it. Preferences in `skills.yaml` (see [samples/skills.example.yaml](samples/skills.example.yaml)) add rule-based penalties and bonuses: languages, clearance requirements, industries, pay that signals a different job, 100+ applicants. Excluded companies and closed postings score 0 but stay listed. Every adjustment is printed in the rank row, and it's all computed at rank time with no LLM, so editing preferences is free.
 - **Two cohorts.** The backfill archive was written by hand for me to read; live postings arrive verbatim. They're tagged separately, because numbers from one don't predict the other.
 
 Model: Claude Haiku 5.5, via OpenRouter, at low effort. About a tenth of a cent per posting.

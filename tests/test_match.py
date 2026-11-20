@@ -291,28 +291,3 @@ def test_match_carries_flags_score_and_metadata():
     assert m.flags == ["years: 20+ (profile: 15)"]
     assert m.matched_at
 
-
-# Exclusions: preferences that have a right answer, so rules rather than prompt text
-
-EXCLUDING = PROFILE.model_copy(update={"exclude_companies": ["Anduril", "SpaceX"], "exclude_domains": ["defense"]})
-
-
-@pytest.mark.parametrize("fields, flag", [
-    ({"company": "Anduril Industries"}, "excluded: Anduril"),
-    ({"company": "spacex"}, "excluded: SpaceX"),
-    ({"company": None, "source": "agency", "intermediary": "Anduril"}, "excluded: Anduril"),
-    ({"domain": "defense"}, "excluded: defense"),
-    ({"domain": "defense tech"}, "excluded: defense"),
-])
-def test_excluded_company_or_domain_flags_first(fields, flag):
-    flags = compute_flags(req(years_min=20, **fields), EXCLUDING)
-    assert flags[0] == flag
-
-
-@pytest.mark.parametrize("fields", [{"company": "Andurilco"}, {"domain": "insurance"}, {"domain": None}])
-def test_exclusions_match_whole_words_only(fields):
-    assert compute_flags(req(**fields), EXCLUDING) == []
-
-
-def test_profile_exclusions_default_empty():
-    assert (PROFILE.exclude_companies, PROFILE.exclude_domains) == ([], [])

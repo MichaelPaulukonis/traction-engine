@@ -137,10 +137,8 @@ def _has_word(term: str, text: str | None) -> bool:
 
 
 def compute_flags(req: Requirements, profile: Profile) -> list[str]:
-    """Rule-based, no LLM. An unstated field (or empty locations) never flags. Exclusions come first."""
-    flags = [f"excluded: {name}" for name in profile.exclude_companies
-             if _has_word(name, req.company) or _has_word(name, req.intermediary)]
-    flags += [f"excluded: {term}" for term in profile.exclude_domains if _has_word(term, req.domain)]
+    """Rule-based, no LLM. An unstated field (or empty locations) never flags."""
+    flags = []
     if req.years_min is not None and req.years_min > profile.years:
         flags.append(f"years: {req.years_min}+ (profile: {profile.years})")
     named = [s for s in req.seniority if s != "unstated"]

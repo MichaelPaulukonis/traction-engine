@@ -1,0 +1,40 @@
+# Synthetic skills.yaml for traction-engine (the real one is private).
+# Point skills_path in config.local.yaml at your own copy.
+# Spec: docs/specs/2026-11-11-m2-match-design.md (skills, profile) and
+#       docs/specs/2026-11-20-preferences-design.md (preferences).
+
+profile:                      # inputs for flags
+  years: 12
+  seniority: [senior, staff]
+  workplace_ok: [remote, hybrid]
+  locations_ok: [Springfield, Shelbyville]   # towns, not a state: "MA" would pass the whole state
+  contract_ok: [full_time, contract_to_hire]
+
+preferences:                  # rank-time adjustments, rules only
+  weights: {small: 5, medium: 15, large: 30}
+  allow_companies: [Example Shipyard]        # skips domain exclusions/penalties
+  exclude:                                   # score 0, still listed
+    companies: [Example Weapons Corp]
+    domains: [defense]
+  penalize:
+    requirements:                            # whole word in a name or alternative
+      Java: {must: large, other: medium}
+      clearance: large
+    domains: {gambling: medium}
+    title: {founding engineer: medium}
+    text: {"fast[- ]paced": small}           # regex on the posting text
+    comp_min_over: {amount: 300000, size: medium}
+    applicants_over: {count: 100, size: medium}
+  bonus:
+    requirements: {COBOL: medium}
+
+skills:
+  - name: Python              # canonical name per aliases.yaml
+    tier: primary             # primary -> met, familiar -> partial
+    evidence: "Built the billing pipeline at Example Co (2019-2024)"
+  - name: TypeScript
+    tier: familiar
+    evidence: "Internal dashboards, 2 years"
+  - name: Insurance
+    tier: primary
+    evidence: "Eight years in claims systems"

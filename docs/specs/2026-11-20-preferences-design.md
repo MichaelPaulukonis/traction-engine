@@ -34,9 +34,9 @@ preferences:
     companies: [Example Defense Corp]
     domains: [defense, military]
   penalize:
-    requirements:                # matched through aliases.key on names and alternatives
+    requirements:                # whole word in a name or alternative, or same aliases.key
       Java: {must: large, other: medium}   # 'other' = nice-to-have or one of several alternatives
-      Security clearance: large
+      clearance: large                     # 'Top Secret/SCI clearance', 'clearance eligibility', ...
     domains: {gambling: medium, sports betting: medium}
     title: {founding engineer: medium}
     text: {"fast[- ]paced": small}         # regex on the posting text

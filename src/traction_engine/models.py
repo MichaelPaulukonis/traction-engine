@@ -3,6 +3,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from traction_engine.preferences import Preferences
+
 Seniority = Literal["junior", "mid", "senior", "lead", "staff", "principal", "unstated"]
 SENIORITY_ORDER = Seniority.__args__
 
@@ -122,14 +124,12 @@ class Profile(BaseModel):
     workplace_ok: list[Workplace]
     locations_ok: list[str]
     contract_ok: list[EmploymentType]
-    # Hard no's: matched on word boundaries against company/intermediary and the extracted domain.
-    exclude_companies: list[str] = []
-    exclude_domains: list[str] = []
 
 
 class Skills(BaseModel):
     profile: Profile
     skills: list[Skill]
+    preferences: Preferences = Preferences()
 
 
 class RequirementMatch(BaseModel):

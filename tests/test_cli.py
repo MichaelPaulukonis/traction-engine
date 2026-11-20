@@ -323,8 +323,8 @@ def test_rank_sorts_by_score_filters_by_date_and_needs_no_key(project, monkeypat
     write_record(reports, "unmatched")
     assert cli.main(["--rank"]) == 0
     out = capsys.readouterr().out
-    rows = [line for line in out.splitlines() if line.startswith("| ") and "Fit |" not in line]
-    assert [row.split("|")[2].strip() for row in rows] == ["old", "high", "low", "none"]
+    rows = [line for line in out.splitlines() if line.startswith("| ") and "Skills fit |" not in line]
+    assert [row.split("|")[3].strip() for row in rows] == ["old", "high", "low", "none"]
     assert "workplace: onsite" in out
     assert "Kubernetes" in out
     assert (reports / "rank.md").read_text().startswith("# 4 matched postings")
@@ -334,9 +334,13 @@ def test_rank_sorts_by_score_filters_by_date_and_needs_no_key(project, monkeypat
     assert "| old |" not in out and "| high |" in out
 
 
-def test_rank_hides_excluded_using_current_profile(project, monkeypatch, capsys):
-    (project / "skills.yaml").write_text(SKILLS_YAML.replace(
-        "contract_ok: [full_time]}", "contract_ok: [full_time], exclude_companies: [Anduril]}"))
+
+def test_rank_scores_with_preferences_and_keeps_excluded_at_zero(project, monkeypatch, capsys):
+    (project / "skills.yaml").write_text(SKILLS_YAML + """
+preferences:
+  exclude: {companies: [Anduril]}
+  penalize: {requirements: {SQL: large}}
+""")
     base = cli.load_config()
     monkeypatch.setattr(cli, "load_config", lambda: {**base, "skills_path": "skills.yaml"})
     reports = project / "reports"
@@ -346,6 +350,9 @@ def test_rank_hides_excluded_using_current_profile(project, monkeypatch, capsys)
     rec["requirements"]["company"] = "Anduril"
     (reports / "bad.json").write_text(json.dumps(rec))
     assert cli.main(["--rank"]) == 0
-    out = capsys.readouterr().out
-    assert "| ok |" in out and "| bad |" not in out
-    assert "1 excluded: bad (excluded: Anduril)" in out
+    rows = [line for line in capsys.readouterr().out.splitlines() if line.startswith("| ") and "Skills fit |" not in line]
+    assert [row.split("|")[3].strip() for row in rows] == ["ok", "bad"]
+    assert rows[0].split("|")[1].strip() == "20"      # 50 fit - 30 for SQL (must)
+    assert "-30 SQL (must)" in rows[0]
+    assert rows[1].split("|")[1].strip() == "0"
+    assert "EXCLUDED: Anduril" in rows[1]

@@ -4,7 +4,7 @@
     triage --backfill [DIR ...]   extract every posting in DIRs (default: config postings_dirs)
     triage --summary [--cohort C] requirement frequencies across saved extractions
     triage --rematch [--force]    re-run match on saved extractions after skills.yaml edits
-    triage --rank [--since DATE]  matched postings sorted by fit score, also saved to reports/rank.md (offline)
+    triage --rank [--since DATE]  postings by rank score (skills fit + preferences), saved to reports/rank.md (offline)
 
 When skills_path is configured, triage and --backfill run match after extract.
 
@@ -38,7 +38,8 @@ from traction_engine import aliases
 from traction_engine.extract import PROMPT_PATH, extract
 from traction_engine.llm import LLM, BudgetExceeded, LLMRefused
 from traction_engine.match import compute_flags, load_skills, match, skills_hash
-from traction_engine.models import Match, RequirementMatch, Requirements
+from traction_engine.models import Match, RequirementMatch, Requirements, Skills
+from traction_engine.preferences import Preferences, assess
 
 ROOT = Path(__file__).resolve().parents[2]
 MIN_REQUIREMENTS = 3
@@ -198,34 +199,41 @@ def rematch_one(rec_path: Path, matcher: Matcher) -> Match:
     return match_res
 
 
-def rank(records: list[dict], since: str | None = None, profile=None) -> str:
-    """Matched records, best fit first; no score sorts last.
+def _posting_text(record: dict) -> str | None:
+    path = Path(record["posting"]).expanduser()
+    return path.read_text() if path.exists() else None
 
-    With a profile, flags are recomputed from it (rules only, free), so skills.yaml edits
-    show up without a paid --rematch. Excluded postings are listed below the table, not in it.
+
+def rank(records: list[dict], since: str | None = None, skills: Skills | None = None,
+         lookup: dict[str, str] | None = None) -> str:
+    """Matched records by rank score: skills fit adjusted by preferences (rules only, free).
+
+    With skills, flags and preferences come from the current skills.yaml, so edits show up
+    without a paid --rematch. Closed and excluded postings stay listed, at score 0.
     """
     if since:
         records = [r for r in records if (r.get("posting_date") or "") >= since]
-    if profile:
-        for r in records:
-            r["match"]["flags"] = compute_flags(Requirements.model_validate(r["requirements"]), profile)
-    excluded = [r for r in records if any(f.startswith("excluded:") for f in r["match"]["flags"])]
-    records = [r for r in records if r not in excluded]
-    records = sorted(records, key=lambda r: (r["match"]["score"] is None, -(r["match"]["score"] or 0)))
-    lines = [f"# {len(records)} matched postings", "",
-             "| Fit | Posting | Company | Title | Flags | Missing must-haves |", "|---|---|---|---|---|---|"]
+    prefs = skills.preferences if skills else Preferences()
+    rows = []
     for r in records:
-        m, req = r["match"], r["requirements"]
-        fit = f"{m['score']:.0%}" if m["score"] is not None else "n/a"
-        missing = [x["name"] for x in m["must_have"] if x["verdict"] == "missing"]
+        req = Requirements.model_validate(r["requirements"])
+        m = r["match"]
+        flags = compute_flags(req, skills.profile) if skills else m["flags"]
+        a = assess(req, _posting_text(r), r.get("posting_date"), prefs, lookup or {})
+        rows.append((a.score(m["score"]), m["score"], r, flags, a))
+    rows.sort(key=lambda row: (-row[0], row[1] is None, -(row[1] or 0)))
+    lines = [f"# {len(rows)} matched postings", "",
+             "| Score | Skills fit | Posting | Company | Title | Adjustments | Flags | Missing must-haves |",
+             "|---|---|---|---|---|---|---|---|"]
+    for score, fit, r, flags, a in rows:
+        req = r["requirements"]
+        missing = [x["name"] for x in r["match"]["must_have"] if x["verdict"] == "missing"]
+        adjustments = ([a.zero] if a.zero else []) + [f"{p:+d} {label}" for p, label in a.adjustments]
         lines.append("| " + " | ".join(_cell(c) for c in (
-            fit, Path(r["posting"]).stem, req.get("company") or "", req.get("title") or "",
-            "; ".join(m["flags"]), ", ".join(missing[:3]) + (" ..." if len(missing) > 3 else ""),
+            str(score), f"{fit:.0%}" if fit is not None else "n/a", Path(r["posting"]).stem,
+            req.get("company") or "", req.get("title") or "", "; ".join(adjustments), "; ".join(flags),
+            ", ".join(missing[:3]) + (" ..." if len(missing) > 3 else ""),
         )) + " |")
-    if excluded:
-        lines += ["", f"{len(excluded)} excluded: " + ", ".join(
-            f"{Path(r['posting']).stem} ({'; '.join(f for f in r['match']['flags'] if f.startswith('excluded:'))})"
-            for r in excluded)]
     return "\n".join(lines)
 
 
@@ -283,8 +291,9 @@ def main(argv: list[str] | None = None) -> int:
     if args.rank:
         records = [json.loads(p.read_text()) for p in sorted(reports.glob("*.json"))]
         skills_file = skills_path(config)
-        profile = load_skills(skills_file).profile if skills_file else None
-        table = rank([r for r in records if "match" in r], args.since, profile)
+        lookup = aliases.load()
+        skills = load_skills(skills_file, lookup) if skills_file else None
+        table = rank([r for r in records if "match" in r], args.since, skills, lookup)
         (reports / "rank.md").write_text(table + "\n")
         print(table)
         print(f"\nsaved to {reports / 'rank.md'}")
