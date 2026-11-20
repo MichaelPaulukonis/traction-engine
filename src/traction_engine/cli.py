@@ -88,6 +88,15 @@ def skills_path(config: dict) -> Path | None:
     return ROOT / Path(config["skills_path"]).expanduser() if config.get("skills_path") else None
 
 
+URL_LINE = re.compile(r"^\s*(?:- )?(?:URL|Sources?):\s*<?(https?://[^\s>]+)", re.M | re.I)
+
+
+def posting_url(text: str | None) -> str | None:
+    """The posting's own link: the capture's 'URL:' or 'Source:' line, not any URL in the body."""
+    m = URL_LINE.search(text or "")
+    return m.group(1) if m else None
+
+
 def _cell(text: str) -> str:
     return text.replace("|", "\\|").replace("\n", " ")
 
@@ -122,7 +131,8 @@ def render_fit(m: Match) -> list[str]:
     return lines
 
 
-def render_report(path: Path, req: Requirements, warning: str | None, match_res: Match | None = None) -> str:
+def render_report(path: Path, req: Requirements, warning: str | None, match_res: Match | None = None,
+                  url: str | None = None) -> str:
     lines = [f"# {req.title or path.stem}", ""]
     if warning:
         lines += [f"> **Warning:** {warning}", ""]
@@ -139,6 +149,7 @@ def render_report(path: Path, req: Requirements, warning: str | None, match_res:
         f"- Domain: {req.domain or 'unstated'}",
         f"- Comp: {comp}",
         f"- Posting: `{path}`",
+        *([f"- URL: {url}"] if url else []),
         "",
     ]
     if match_res:
@@ -160,7 +171,8 @@ def write_report(out: Path, stem: str, record: dict, match_res: Match | None = N
         record["match"] = match_res.model_dump()
     req = Requirements.model_validate(record["requirements"])
     (out / f"{stem}.json").write_text(json.dumps(record, indent=2))
-    (out / f"{stem}.md").write_text(render_report(Path(record["posting"]), req, record["warning"], match_res))
+    (out / f"{stem}.md").write_text(render_report(Path(record["posting"]), req, record["warning"], match_res,
+                                                    posting_url(_posting_text(record))))
 
 
 def triage_one(llm: LLM, path: Path, config: dict, prompt_hash: str, cohort: str,
@@ -228,11 +240,12 @@ def rank(records: list[dict], since: str | None = None, skills: Skills | None = 
              "|---|---|---|---|---|---|---|---|"]
     for score, fit, r, flags, a in rows:
         req = r["requirements"]
+        title, url = req.get("title") or "", posting_url(_posting_text(r))
         missing = [x["name"] for x in r["match"]["must_have"] if x["verdict"] == "missing"]
         adjustments = ([a.zero] if a.zero else []) + [f"{p:+d} {label}" for p, label in a.adjustments]
         lines.append("| " + " | ".join(_cell(c) for c in (
             str(score), f"{fit:.0%}" if fit is not None else "n/a", Path(r["posting"]).stem,
-            req.get("company") or "", req.get("title") or "", "; ".join(adjustments), "; ".join(flags),
+            req.get("company") or "", f"[{title or 'posting'}]({url})" if url else title, "; ".join(adjustments), "; ".join(flags),
             ", ".join(missing[:3]) + (" ..." if len(missing) > 3 else ""),
         )) + " |")
     return "\n".join(lines)

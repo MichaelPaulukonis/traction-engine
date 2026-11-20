@@ -356,3 +356,29 @@ preferences:
     assert "-30 SQL (must)" in rows[0]
     assert rows[1].split("|")[1].strip() == "0"
     assert "EXCLUDED: Anduril" in rows[1]
+
+
+def test_posting_url_takes_the_labeled_line():
+    assert cli.posting_url("# T\n- URL: https://www.linkedin.com/jobs/view/123/\nbody") == \
+        "https://www.linkedin.com/jobs/view/123/"
+    assert cli.posting_url("Source: <https://example.com/job/9>\n") == "https://example.com/job/9"
+    assert cli.posting_url("About us: https://example.com/about\n") is None
+    assert cli.posting_url(None) is None
+
+
+def test_report_and_rank_link_the_posting_url(project, capsys):
+    (project / "postings").mkdir(exist_ok=True)
+    (project / "postings" / "high.md").write_text("# T\n- URL: https://jobs.example.com/1\n")
+    reports = project / "reports"
+    write_record(reports, "high", 0.9, "h")
+    write_record(reports, "nourl", 0.5, "h")
+    rec = json.loads((reports / "high.json").read_text())
+    rec["posting"] = str(project / "postings" / "high.md")
+    (reports / "high.json").write_text(json.dumps(rec))
+    assert cli.main(["--rank"]) == 0
+    rows = [l for l in capsys.readouterr().out.splitlines() if l.startswith("| ") and "Skills fit |" not in l]
+    assert "](https://jobs.example.com/1)" in rows[0]
+    assert "](" not in rows[1]
+
+    cli.write_report(reports, "high", rec)
+    assert "- URL: https://jobs.example.com/1" in (reports / "high.md").read_text()
