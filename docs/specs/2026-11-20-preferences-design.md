@@ -41,6 +41,7 @@ preferences:
     title: {founding engineer: medium}
     text: {"fast[- ]paced": small}         # regex on the posting text
     comp_min_over: {amount: 300000, size: medium}   # annual only
+    out_of_area: large           # workplace not OK, or hybrid/onsite outside profile.locations_ok
     applicants_over: {count: 100, size: medium}
   bonus:
     requirements: {COBOL: medium}

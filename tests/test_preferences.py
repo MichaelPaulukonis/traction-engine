@@ -1,7 +1,7 @@
 import pytest
 
 from traction_engine import aliases
-from traction_engine.models import Requirement, Requirements
+from traction_engine.models import Profile, Requirement, Requirements
 from traction_engine.preferences import Preferences, applicants, assess, closed
 
 
@@ -150,3 +150,23 @@ def test_no_text_skips_text_rules():
 def test_requirement_terms_match_whole_words(name, hit):
     prefs = Preferences.model_validate({"penalize": {"requirements": {"clearance": "large", "Java": "large"}}})
     assert bool(run(req(must=[r(name)]), prefs=prefs).adjustments) == hit
+
+
+PROFILE = Profile(years=15, seniority=["senior"], workplace_ok=["remote", "hybrid"],
+                  locations_ok=["Boston"], contract_ok=["full_time"])
+AREA = Preferences.model_validate({"penalize": {"out_of_area": "large"}})
+
+
+@pytest.mark.parametrize("fields, expected", [
+    ({"workplace": "hybrid", "locations": ["Santa Monica, CA"]}, [(-30, "hybrid: Santa Monica, CA")]),
+    ({"workplace": "onsite", "locations": ["Boston, MA"]}, [(-30, "workplace: onsite")]),
+    ({"workplace": "hybrid", "locations": ["Boston, MA"]}, []),
+    ({"workplace": "remote", "locations": ["Santa Monica, CA"]}, []),
+    ({"workplace": "hybrid", "locations": []}, []),
+])
+def test_out_of_area_penalty(fields, expected):
+    assert labels(assess(req(**fields), None, None, AREA, LOOKUP, PROFILE)) == expected
+
+
+def test_out_of_area_needs_a_profile():
+    assert labels(run(req(workplace="hybrid", locations=["Santa Monica, CA"]), prefs=AREA)) == []

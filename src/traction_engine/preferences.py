@@ -17,8 +17,9 @@ from typing import TYPE_CHECKING, Literal
 from pydantic import BaseModel
 
 from traction_engine import aliases
-if TYPE_CHECKING:  # models imports Preferences, so only the type comes from there
-    from traction_engine.models import Requirements
+
+if TYPE_CHECKING:  # models imports Preferences, so only the types come from there
+    from traction_engine.models import Profile, Requirements
 
 Size = Literal["small", "medium", "large"]
 
@@ -50,6 +51,7 @@ class Penalize(BaseModel):
     title: dict[str, Size] = {}
     text: dict[str, Size] = {}
     comp_min_over: CompOver | None = None
+    out_of_area: Size | None = None   # workplace not OK, or hybrid/onsite outside locations_ok
     applicants_over: ApplicantsOver | None = None
 
 
@@ -78,6 +80,19 @@ class Assessment:
 
 def _has_word(term: str, text: str | None) -> bool:
     return bool(text) and re.search(rf"\b{re.escape(term)}\b", text, re.I) is not None
+
+
+def out_of_area(req: Requirements, profile: Profile) -> str | None:
+    """Why the job seeker can't be present, or None. Unstated workplace or no locations: None."""
+    if req.workplace == "unstated":
+        return None
+    if req.workplace not in profile.workplace_ok:
+        return f"workplace: {req.workplace}"
+    if req.workplace in ("hybrid", "onsite") and req.locations and not any(
+        _has_word(ok, loc) for loc in req.locations for ok in profile.locations_ok
+    ):
+        return f"{req.workplace}: {', '.join(req.locations)}"
+    return None
 
 
 APPLICANTS = re.compile(r"\b(over )?(\d+) (?:applicants|people clicked apply)", re.I)
@@ -134,7 +149,7 @@ def _requirement_adjustments(rules: dict[str, Size | Placed], sign: int, req: Re
 
 
 def assess(req: Requirements, text: str | None, posting_date: str | None,
-           prefs: Preferences, lookup: dict[str, str]) -> Assessment:
+           prefs: Preferences, lookup: dict[str, str], profile: Profile | None = None) -> Assessment:
     w = prefs.weights
     pen = prefs.penalize
     a = Assessment()
@@ -153,6 +168,8 @@ def assess(req: Requirements, text: str | None, posting_date: str | None,
     if not allowed:
         a.adjustments += [(-w[s], f"domain: {d}") for d, s in pen.domains.items() if _has_word(d, req.domain)]
     a.adjustments += [(-w[s], f"title: {t}") for t, s in pen.title.items() if _has_word(t, req.title)]
+    if pen.out_of_area and profile and (where := out_of_area(req, profile)):
+        a.adjustments.append((-w[pen.out_of_area], where))
     c = pen.comp_min_over
     if c and req.comp_period == "year" and req.comp_min is not None and req.comp_min > c.amount:
         a.adjustments.append((-w[c.size], f"comp min ${req.comp_min:,.0f}"))

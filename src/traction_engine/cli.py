@@ -219,7 +219,8 @@ def rank(records: list[dict], since: str | None = None, skills: Skills | None = 
         req = Requirements.model_validate(r["requirements"])
         m = r["match"]
         flags = compute_flags(req, skills.profile) if skills else m["flags"]
-        a = assess(req, _posting_text(r), r.get("posting_date"), prefs, lookup or {})
+        a = assess(req, _posting_text(r), r.get("posting_date"), prefs, lookup or {},
+                   skills.profile if skills else None)
         rows.append((a.score(m["score"]), m["score"], r, flags, a))
     rows.sort(key=lambda row: (-row[0], row[1] is None, -(row[1] or 0)))
     lines = [f"# {len(rows)} matched postings", "",
@@ -274,7 +275,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--cohort", help="with --summary: only this cohort (backfill or live)")
     parser.add_argument("--rematch", action="store_true", help="re-run match on saved extractions")
     parser.add_argument("--rank", action="store_true", help="matched postings sorted by fit")
-    parser.add_argument("--since", metavar="YYYY-MM-DD", help="with --rank: postings dated on or after this")
+    parser.add_argument("--since", metavar="YYYY-MM-DD", help="with --rank: postings dated on or after this (default: rank_since in config)")
     parser.add_argument("--force", action="store_true",
                         help="re-extract postings already extracted; with --rematch, re-match current ones")
     args = parser.parse_args(argv)
@@ -293,7 +294,7 @@ def main(argv: list[str] | None = None) -> int:
         skills_file = skills_path(config)
         lookup = aliases.load()
         skills = load_skills(skills_file, lookup) if skills_file else None
-        table = rank([r for r in records if "match" in r], args.since, skills, lookup)
+        table = rank([r for r in records if "match" in r], args.since or config.get("rank_since"), skills, lookup)
         (reports / "rank.md").write_text(table + "\n")
         print(table)
         print(f"\nsaved to {reports / 'rank.md'}")
