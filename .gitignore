@@ -16,3 +16,4 @@ reports/
 .beads-credential-key
 .beads/proxieddb/
 *.gate.lock*
+context/
